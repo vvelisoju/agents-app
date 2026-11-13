@@ -67,10 +67,14 @@ model Agent {
   hoursStart    Int?
   hoursEnd      Int?
   timezone      String           @default("Asia/Kolkata")
-  // Urgent-lead alerts: when a customer is clearly in a hurry to get onboarded,
-  // the agent WhatsApps the owner at this number (digits only, e.g. 7287820821).
-  // Null/empty = alerts off. Delivered via the agent's own channel session.
+  // Owner alerts: the agent WhatsApps the owner at this number (digits only) when
+  // a conversation matches `alertCondition`. Null/empty number = alerts off.
+  // Delivered via the agent's own channel session.
   alertNumber   String?
+  // When to alert, in the OWNER'S OWN WORDS (free text, business-specific). Blank
+  // falls back to a sensible default. This is what makes alerting generic — every
+  // business decides its own trigger (urgent lead, complaint, bulk order, VIP, …).
+  alertCondition String?
   channelConfig String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
   createdAt     DateTime         @default(now())
   profile       TrainingProfile?

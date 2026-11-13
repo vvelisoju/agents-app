@@ -26,7 +26,7 @@ export function TestPanel({ id }: { id: string }) {
       </div>
       {urgent && (
         <div className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 p-2.5 text-xs text-primary">
-          <span>🔥</span><span>This would alert you as an <span className="font-medium">urgent lead</span>: “{urgent}”.</span>
+          <span>🔔</span><span>Your agent would <span className="font-medium">alert you</span> about this: “{urgent}”.</span>
         </div>
       )}
       {draft && <div className="whitespace-pre-wrap rounded-lg border border-border bg-background/60 p-3 text-sm">{draft}</div>}

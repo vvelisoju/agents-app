@@ -80,12 +80,12 @@ export function ChatsPanel({ id }: { id: string }) {
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{c.contactName || displayContact(c.contactNumber)}</span>
-              {c.alertedAt && <span title="Urgent lead — you were alerted">🔥</span>}
+              {c.alertedAt && <span title="You were alerted about this chat">🔔</span>}
             </span>
             <span className="text-xs text-muted-foreground">{timeAgo(c.lastMessageAt)}</span>
           </span>
           <span className="flex items-center gap-1.5">
-            {c.alertedAt && <Badge variant="primary">Urgent</Badge>}
+            {c.alertedAt && <Badge variant="primary">Alerted</Badge>}
             {c.takenOver && <Badge variant="warn">You</Badge>}
             {c.muted && <BellOff size={13} className="text-muted-foreground" />}
             <ChevronRight size={16} className="text-muted-foreground" />

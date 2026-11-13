@@ -57,13 +57,16 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   if (req.body?.hoursEnd === null || typeof req.body?.hoursEnd === 'number') data.hoursEnd = req.body.hoursEnd;
   if (typeof req.body?.timezone === 'string') data.timezone = req.body.timezone;
   if (req.body?.channelConfig && typeof req.body.channelConfig === 'object') data.channelConfig = JSON.stringify(req.body.channelConfig);
-  // Urgent-lead alert number (null/empty clears). Validate as an Indian mobile.
+  // Owner-alert number (null/empty clears). Validate as an Indian mobile.
   if (req.body?.alertNumber === null || req.body?.alertNumber === '') data.alertNumber = null;
   else if (typeof req.body?.alertNumber === 'string') {
     const norm = normalizePhone(req.body.alertNumber);
     if (!norm) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number for alerts.' });
     data.alertNumber = norm;
   }
+  // Owner-defined alert condition (free text). null/empty clears → default is used.
+  if (req.body?.alertCondition === null || req.body?.alertCondition === '') data.alertCondition = null;
+  else if (typeof req.body?.alertCondition === 'string') data.alertCondition = req.body.alertCondition.trim().slice(0, 600);
   const updated = await prisma.agent.update({ where: { id: agent(req).id }, data });
   res.json(updated);
 }));

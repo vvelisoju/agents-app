@@ -38,13 +38,19 @@ describe('composeSystemPrompt', () => {
   it('includes the escalation keyword', () => {
     expect(p).toContain('NEEDS_HUMAN');
   });
-  it('omits the urgent-alert instruction when no alert number is set', () => {
-    expect(p).not.toContain('URGENT LEAD ALERTS');
+  it('omits the owner-alert instruction when no alert number is set', () => {
+    expect(p).not.toContain('OWNER ALERTS');
   });
-  it('adds the urgent-alert instruction only when an alert number is set', () => {
+  it('adds the owner-alert instruction (with the default condition) when a number is set', () => {
     const withAlert = composeSystemPrompt({ ...agent, alertNumber: '7287820821' }, profile, sources);
-    expect(withAlert).toContain('URGENT LEAD ALERTS');
+    expect(withAlert).toContain('OWNER ALERTS');
     expect(withAlert).toContain('[[ALERT]]');
+    expect(withAlert).toContain('get started right away'); // the default condition text
+  });
+  it('uses the owner\'s own alert condition verbatim when provided', () => {
+    const withAlert = composeSystemPrompt({ ...agent, alertNumber: '7287820821', alertCondition: 'anyone mentions a wedding booking' }, profile, sources);
+    expect(withAlert).toContain('anyone mentions a wedding booking');
+    expect(withAlert).not.toContain('get started right away');
   });
 });
 

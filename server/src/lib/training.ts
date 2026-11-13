@@ -9,10 +9,17 @@ export interface Source {
   enabled: boolean;
 }
 
-// Control token the model emits on its own first line for a hot/urgent lead.
-// The engine strips this line before the customer sees it and uses the reason
-// to alert the owner. Deliberately distinctive so it never collides with prose.
+// Control token the model emits on its own first line when the owner's alert
+// condition matches. The engine strips this line before the customer sees it and
+// uses the reason to notify the owner. Distinctive so it never collides with prose.
 export const ALERT_TOKEN = '[[ALERT]]';
+
+// The fallback trigger when an owner turns on alerts but doesn't describe their
+// own condition. Keeps the feature useful out of the box without hardcoding any
+// one business's use case.
+export const DEFAULT_ALERT_CONDITION =
+  'a customer clearly wants to get started right away — they ask to book, buy, visit, ' +
+  'onboard or be called back now/today, or show strong intent with time pressure';
 
 // Pull a leading "[[ALERT]] <reason>" line out of a draft. Returns the reason
 // (or null) and the cleaned reply with any such line removed, so the customer
@@ -22,7 +29,7 @@ export function extractAlert(text: string): { reason: string | null; clean: stri
   let reason: string | null = null;
   const kept = text.split('\n').filter((line) => {
     const m = line.match(/^\s*\[\[\s*ALERT\s*\]\]\s*:?\s*(.*)$/i);
-    if (m) { if (!reason) reason = (m[1] || '').trim() || 'customer wants to get started urgently'; return false; }
+    if (m) { if (!reason) reason = (m[1] || '').trim() || 'matched your alert condition'; return false; }
     return true;
   });
   return { reason, clean: kept.join('\n').trim() };
@@ -61,19 +68,22 @@ export function composeSystemPrompt(agent: any, profile: any, sources: Source[])
   const esc = profile?.escalationKeyword || 'NEEDS_HUMAN';
   parts.push(`If a message is a complaint, refund/payment dispute, or anything sensitive, reply with exactly: ${esc}`);
 
-  // Urgent-lead alerting (only when the owner has set an alert number). The model
-  // signals a hot lead with a control line that the system strips before sending.
+  // Owner alerts (only when the owner has set an alert number). The TRIGGER is the
+  // owner's own words (`alertCondition`), falling back to a sensible default — this
+  // is what keeps alerting generic across businesses. The model signals a match with
+  // a control line that the engine strips before sending to the customer.
   if (agent?.alertNumber) {
+    const condition = (agent.alertCondition && String(agent.alertCondition).trim()) || DEFAULT_ALERT_CONDITION;
     parts.push(
-      `URGENT LEAD ALERTS:\n` +
-      `A lead is URGENT when the customer clearly wants to get started / onboarded / visit SOON — ` +
-      `e.g. "need a desk today", "can I come now / in an hour", "need it urgently / immediately / by tomorrow", ` +
-      `"ready to pay / book now", or strong buying intent with time pressure. ` +
-      `Simple price/info questions are NOT urgent.\n` +
-      `When (and only when) the lead is urgent, make the VERY FIRST LINE of your output exactly:\n` +
-      `${ALERT_TOKEN} <6-10 word reason, e.g. "wants to book a cabin, visiting today">\n` +
+      `OWNER ALERTS:\n` +
+      `The business owner wants a private heads-up in specific situations. Notify the owner when:\n` +
+      `"${condition}"\n` +
+      `Judge this from the LATEST customer message (and the conversation so far). Everyday questions that ` +
+      `do NOT match should never trigger an alert.\n` +
+      `When (and only when) it matches, make the VERY FIRST LINE of your output exactly:\n` +
+      `${ALERT_TOKEN} <6-10 word reason naming what matched>\n` +
       `Then on the next line write your normal, warm reply to the customer. ` +
-      `Never mention this alert line to the customer and never write ${ALERT_TOKEN} when it is not urgent.`,
+      `Never mention this alert line to the customer and never write ${ALERT_TOKEN} when it does not match.`,
     );
   }
 

@@ -6,7 +6,9 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ConnectCard } from './ConnectCard';
+import { ALERT_CONDITION_PLACEHOLDER } from './AlertSettingsCard';
 import { Check, Sparkles, Zap, HandMetal, Siren, ArrowRight, Loader2 } from 'lucide-react';
 
 type Props = { id: string; agent: any; onFinish: () => void; onSkip: () => void };
@@ -56,16 +58,17 @@ export function SetupGuide({ id, agent, onFinish, onSkip }: Props) {
     onSuccess: () => { invalidateTraining(); toast('Set up for your business type', 'good'); },
   });
 
-  // ---- Step 3: go live (auto-reply choice + urgent-lead alert number) ----
+  // ---- Step 3: go live (auto-reply choice + owner-alert number & condition) ----
   const [autoReply, setAutoReply] = React.useState<boolean>(!!agent.autoSend);
   const [alertOn, setAlertOn] = React.useState<boolean>(isWhatsapp);
   const [alertNum, setAlertNum] = React.useState<string>(agent.alertNumber || me?.phone || '');
+  const [alertCond, setAlertCond] = React.useState<string>(agent.alertCondition || '');
   React.useEffect(() => { if (!alertNum && me?.phone) setAlertNum(me.phone); }, [me?.phone]);
 
   const goLive = useMutation({
     mutationFn: async () => {
       const body: any = { autoSend: autoReply };
-      if (isWhatsapp) body.alertNumber = alertOn ? alertNum.trim() : null;
+      if (isWhatsapp) { body.alertNumber = alertOn ? alertNum.trim() : null; if (alertOn) body.alertCondition = alertCond.trim() || null; }
       await apiRequest('PATCH', `/api/agents/${id}`, body);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/agents/' + id] }); toast("You're all set — your agent is live 🎉", 'good'); onFinish(); },
@@ -175,12 +178,16 @@ export function SetupGuide({ id, agent, onFinish, onSkip }: Props) {
                       {isWhatsapp && (
                         <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
                           <label className="flex items-center justify-between gap-3">
-                            <span className="flex items-center gap-1.5 text-sm font-medium"><Siren size={14} className="text-primary" /> Alert me about urgent leads</span>
+                            <span className="flex items-center gap-1.5 text-sm font-medium"><Siren size={14} className="text-primary" /> Alert me when a chat needs me</span>
                             <input type="checkbox" className="h-4 w-4 accent-[hsl(var(--primary))]" checked={alertOn} onChange={(e) => setAlertOn(e.target.checked)} />
                           </label>
-                          <p className="text-xs text-muted-foreground">When a customer is in a hurry to get started, your agent WhatsApps you so you can jump in.</p>
+                          <p className="text-xs text-muted-foreground">Your agent WhatsApps you when a conversation matches what you care about, so you can jump in.</p>
                           {alertOn && (
-                            <Input value={alertNum} onChange={(e) => setAlertNum(e.target.value)} placeholder="Your WhatsApp number" inputMode="numeric" />
+                            <div className="space-y-2">
+                              <Textarea value={alertCond} onChange={(e) => setAlertCond(e.target.value)} placeholder={ALERT_CONDITION_PLACEHOLDER} className="min-h-[56px]" />
+                              <p className="text-[11px] text-muted-foreground">In your own words — leave blank for the default (urgent, ready-to-buy customers).</p>
+                              <Input value={alertNum} onChange={(e) => setAlertNum(e.target.value)} placeholder="Your WhatsApp number" inputMode="numeric" />
+                            </div>
                           )}
                         </div>
                       )}

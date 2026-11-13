@@ -39,7 +39,7 @@ function LeadCard({ lead, navigate }: { lead: any; navigate: (to: string) => voi
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{lead.contactName || displayContact(lead.contactNumber)}</span>
-              {lead.alertedAt && <span title="Urgent lead — you were alerted">🔥</span>}
+              {lead.alertedAt && <span title="You were alerted about this chat">🔔</span>}
             </span>
             <span className="block truncate text-xs text-muted-foreground">{lead.agentName} · {timeAgo(lead.lastMessageAt)}</span>
           </span>

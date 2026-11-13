@@ -36,14 +36,14 @@ async function alertOwner(agent: any, conv: any, inbound: InboundMessage, reason
       : prettyContact(inbound.from);
     const said = (inbound.text || '').trim().slice(0, 180);
     const body =
-      `🔥 Hot lead on *${agent.name}*\n` +
+      `🔔 *${agent.name}* flagged a chat for you\n` +
       `${who}\n` +
       `${reason}\n\n` +
       `They said: "${said}"\n\n` +
-      `👉 Contact them now to get them onboarded.`;
+      `👉 Open the chat and jump in.`;
 
     await adapter.send(agent.id, chatId, body);
-    await prisma.conversation.update({ where: { id: conv.id }, data: { alertedAt: new Date(), leadStatus: conv.leadStatus === 'new' ? 'qualified' : conv.leadStatus } });
+    await prisma.conversation.update({ where: { id: conv.id }, data: { alertedAt: new Date() } });
     realtime.emit(agent.id, 'alert', { conversationId: conv.id, reason });
   } catch (e: any) {
     console.error('owner alert failed:', e?.message || e);
