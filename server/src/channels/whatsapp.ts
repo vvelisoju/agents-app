@@ -10,6 +10,12 @@ import { register } from './registry';
 
 const clients = new Map<string, any>();
 
+// Where whatsapp-web.js stores each agent's login session. On an ephemeral host
+// (Railway/containers), the default local path is WIPED on every deploy, which
+// forces a re-scan of the QR after each deploy. Point WWEBJS_DATA_PATH at a
+// PERSISTENT VOLUME (e.g. /data/wwebjs_auth) so the session survives deploys.
+const AUTH_DIR = process.env.WWEBJS_DATA_PATH || path.join(__dirname, '..', '..', '.wwebjs_auth');
+
 async function setStatus(agentId: string, status: string) {
   await prisma.agent.update({ where: { id: agentId }, data: { status } }).catch(() => {});
   await prisma.channelSession.upsert({
@@ -22,7 +28,7 @@ async function setStatus(agentId: string, status: string) {
 export async function startSession(agentId: string) {
   if (clients.has(agentId)) return;
   const client = new Client({
-    authStrategy: new LocalAuth({ clientId: agentId, dataPath: path.join(__dirname, '..', '..', '.wwebjs_auth') }),
+    authStrategy: new LocalAuth({ clientId: agentId, dataPath: AUTH_DIR }),
     authTimeoutMs: 90000,
     takeoverOnConflict: true,
     takeoverTimeoutMs: 0,

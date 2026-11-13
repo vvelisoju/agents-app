@@ -176,13 +176,34 @@ Follow steps 1–4 above, but skip the `client:` service — the server only nee
 
 ---
 
+## Option C — Railway (what agents.codevel.com runs)
+
+Railway builds `server/Dockerfile` and runs **one container** — there is no docker-compose,
+so the compose `wa_auth` volume does NOT apply. The container filesystem is **ephemeral**: every
+deploy or restart wipes `/app/.wwebjs_auth`, so each connected WhatsApp agent drops back to
+**Scan QR** after a deploy. Fix it once with a persistent volume:
+
+1. **Add a Volume** to the server service (Railway → service → **Variables/Settings → Volumes →
+   New Volume**). Set the **Mount path** to `/data`.
+2. **Add a variable**: `WWEBJS_DATA_PATH=/data/wwebjs_auth`.
+3. Redeploy (Railway redeploys automatically on the change).
+4. Open the agent → **Connect WhatsApp** → scan **once**. The session now lives on the volume and
+   **survives all future deploys** — the server auto-restores connected agents on boot, no re-scan.
+
+> The app reads `WWEBJS_DATA_PATH` (defaults to the local `.wwebjs_auth` when unset, so local dev
+> and docker-compose are unaffected). DB and WhatsApp data are separate: Postgres persistence is the
+> linked Railway Postgres service; WhatsApp login persistence is this volume.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
 | `docker compose` not found | Use `docker-compose` (v1) or install `docker-compose-plugin` |
 | Server crashes on start | Run `docker compose logs server` — usually a missing env var or DB migration error |
-| WhatsApp QR keeps resetting | The `wa_auth` volume may have been deleted; rescan once and it persists |
+| **WhatsApp shows "Scan QR" again after every deploy (Railway)** | The session dir isn't on a persistent volume. Add a Railway Volume at `/data` + set `WWEBJS_DATA_PATH=/data/wwebjs_auth`, then scan once (see **Option C**). |
+| WhatsApp QR keeps resetting (Docker Compose) | The `wa_auth` volume may have been deleted; rescan once and it persists |
 | `ANTHROPIC_API_KEY not set` warning | Add the key to `server/.env.production` and restart: `docker compose restart server` |
 | Port 80 already in use | Stop the other service (`sudo systemctl stop nginx/apache2`) or change the client port to `8080:80` |
 | CORS errors in browser | Make sure `CORS_ORIGIN` in `server/.env.production` matches the exact origin the browser uses (including `https://`) |
