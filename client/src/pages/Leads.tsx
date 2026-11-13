@@ -37,7 +37,10 @@ function LeadCard({ lead, navigate }: { lead: any; navigate: (to: string) => voi
         <span className="flex min-w-0 items-center gap-2.5">
           <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-md', m.badge)}><ChannelIcon size={15} /></span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium">{lead.contactName || displayContact(lead.contactNumber)}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-medium">{lead.contactName || displayContact(lead.contactNumber)}</span>
+              {lead.alertedAt && <span title="Urgent lead — you were alerted">🔥</span>}
+            </span>
             <span className="block truncate text-xs text-muted-foreground">{lead.agentName} · {timeAgo(lead.lastMessageAt)}</span>
           </span>
         </span>

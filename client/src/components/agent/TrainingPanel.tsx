@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Trash2, Plus, X } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Sparkles, Trash2, Plus, X, Ban } from 'lucide-react';
 
 // The heart: train-from-link (no typing) + optional manual enrichment.
 export function TrainingPanel({ id }: { id: string }) {
@@ -24,6 +25,9 @@ export function TrainingPanel({ id }: { id: string }) {
   });
 
   const [url, setUrl] = React.useState('');
+  // A business-type template the owner tapped while instructions already exist —
+  // held pending an explicit confirm so saved instructions are never wiped silently.
+  const [pendingTemplate, setPendingTemplate] = React.useState<{ id: string; label: string } | null>(null);
   // The reviewable draft: a local, editable copy of what the agent read, so the
   // owner can drop a wrong fact/FAQ or tweak the instructions BEFORE it goes live.
   const [review, setReview] = React.useState<any>(null);
@@ -87,6 +91,9 @@ export function TrainingPanel({ id }: { id: string }) {
   const [linkUrl, setLinkUrl] = React.useState('');
   const addFact = () => { if (fact.trim()) { addSource.mutate({ type: 'fact', data: { content: fact.trim() } }); setFact(''); } };
   const addLink = () => { if (linkName.trim() && linkUrl.trim()) { addSource.mutate({ type: 'link', data: { name: linkName.trim(), url: linkUrl.trim() } }); setLinkName(''); setLinkUrl(''); } };
+
+  // Only offer "Save" when the text actually differs from what's stored.
+  const dirty = instructions !== (data?.profile?.instructions || '') || restrictions !== (data?.profile?.restrictions || '');
 
   return (
     <div className="space-y-4">
@@ -174,8 +181,8 @@ export function TrainingPanel({ id }: { id: string }) {
                 // instructions the owner already saved. Replace only when empty;
                 // if they exist, confirm so an intentional switch is still possible.
                 const hasInstr = !!((instructions || '').trim() || (data?.profile?.instructions || '').trim());
-                if (hasInstr && !window.confirm(`You already have saved instructions. Replace them with the standard "${t.label}" setup?`)) return;
-                applyTemplate.mutate(t.id);
+                if (hasInstr) setPendingTemplate(t);
+                else applyTemplate.mutate(t.id);
               }} disabled={applyTemplate.isPending}
                 className="rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary disabled:opacity-50">
                 {t.emoji} {t.label}
@@ -191,14 +198,22 @@ export function TrainingPanel({ id }: { id: string }) {
         <p className="text-sm text-muted-foreground">{data?.summary || '…'}</p>
 
         <div>
-          <Label>Instructions</Label>
-          <Textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="Greet warmly, keep replies short, always offer a free tour." />
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <Label className="mb-0">How it should behave</Label>
+            <span className="text-[11px] text-muted-foreground">{instructions.trim().length} chars</span>
+          </div>
+          <p className="mb-1.5 text-xs text-muted-foreground">What the agent should do — how to greet, what to highlight, when to offer a tour or booking.</p>
+          <Textarea autoResize value={instructions} onChange={(e) => setInstructions(e.target.value)} className="min-h-[140px] leading-relaxed" placeholder="Greet warmly, keep replies short, always offer a free tour." />
         </div>
         <div>
-          <Label>Never do this</Label>
-          <Textarea value={restrictions} onChange={(e) => setRestrictions(e.target.value)} placeholder="Never quote a final price. Never promise delivery dates." />
+          <Label className="mb-0 flex items-center gap-1.5"><Ban size={13} className="text-destructive" /> Never do this</Label>
+          <p className="mb-1.5 text-xs text-muted-foreground">Hard limits the agent must never cross — these always win over the instructions above.</p>
+          <Textarea autoResize value={restrictions} onChange={(e) => setRestrictions(e.target.value)} className="min-h-[100px] border-destructive/30 bg-destructive/5 leading-relaxed focus-visible:ring-destructive/40" placeholder="Never quote a final price. Never promise delivery dates." />
         </div>
-        <Button size="sm" disabled={saveProfile.isPending} onClick={() => saveProfile.mutate()}>Save instructions</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" disabled={!dirty || saveProfile.isPending} onClick={() => saveProfile.mutate()}>{saveProfile.isPending ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</Button>
+          {dirty && <span className="text-xs text-muted-foreground">Unsaved changes — they apply to the next reply once saved.</span>}
+        </div>
 
         {(data?.sources || []).length > 0 && (
           <div className="space-y-2 pt-2">
@@ -228,6 +243,18 @@ export function TrainingPanel({ id }: { id: string }) {
           </div>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!pendingTemplate}
+        tone="destructive"
+        title="Replace your saved instructions?"
+        message={<>Setting up as <span className="font-medium text-foreground">{pendingTemplate?.label}</span> will replace the instructions you've already written with the standard version. Your facts, links and FAQs stay.</>}
+        confirmLabel="Replace"
+        cancelLabel="Keep mine"
+        busy={applyTemplate.isPending}
+        onConfirm={() => { if (pendingTemplate) applyTemplate.mutate(pendingTemplate.id); setPendingTemplate(null); }}
+        onCancel={() => setPendingTemplate(null)}
+      />
     </div>
   );
 }

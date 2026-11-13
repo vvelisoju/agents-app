@@ -67,6 +67,10 @@ model Agent {
   hoursStart    Int?
   hoursEnd      Int?
   timezone      String           @default("Asia/Kolkata")
+  // Urgent-lead alerts: when a customer is clearly in a hurry to get onboarded,
+  // the agent WhatsApps the owner at this number (digits only, e.g. 7287820821).
+  // Null/empty = alerts off. Delivered via the agent's own channel session.
+  alertNumber   String?
   channelConfig String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
   createdAt     DateTime         @default(now())
   profile       TrainingProfile?
@@ -119,6 +123,9 @@ model Conversation {
   muted         Boolean   @default(false)
   leadStatus    String    @default("new")
   leadNotes     String?
+  // Set when the agent flagged this lead as urgent and pinged the owner. Used to
+  // dedupe alerts (don't re-ping within a cooldown) and to show a 🔥 badge.
+  alertedAt     DateTime?
   messages      Message[]
 
   @@unique([agentId, contactNumber])

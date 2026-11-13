@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { composeSystemPrompt, applyLinks, trainingSummary, Source } from '../src/lib/training';
+import { composeSystemPrompt, applyLinks, trainingSummary, extractAlert, Source } from '../src/lib/training';
 import { TEMPLATES, getTemplate } from '../src/lib/templates';
 import { normaliseUrl, extractReadable } from '../src/lib/learn';
 import { normalizeUpdate } from '../src/channels/telegram';
 import { verifyPaymentSignature } from '../src/lib/razorpay';
-import { normalizePhone, toWhatsappDigits } from '../src/lib/phone';
+import { normalizePhone, toWhatsappDigits, toWhatsappChatId } from '../src/lib/phone';
 import crypto from 'crypto';
 
 const agent = { name: 'Secure Studio' };
@@ -37,6 +37,37 @@ describe('composeSystemPrompt', () => {
   });
   it('includes the escalation keyword', () => {
     expect(p).toContain('NEEDS_HUMAN');
+  });
+  it('omits the urgent-alert instruction when no alert number is set', () => {
+    expect(p).not.toContain('URGENT LEAD ALERTS');
+  });
+  it('adds the urgent-alert instruction only when an alert number is set', () => {
+    const withAlert = composeSystemPrompt({ ...agent, alertNumber: '7287820821' }, profile, sources);
+    expect(withAlert).toContain('URGENT LEAD ALERTS');
+    expect(withAlert).toContain('[[ALERT]]');
+  });
+});
+
+describe('extractAlert', () => {
+  it('pulls a leading alert line and strips it from the reply', () => {
+    const { reason, clean } = extractAlert('[[ALERT]] wants a cabin today\nSure! We have a cabin free — can you visit at 4pm?');
+    expect(reason).toBe('wants a cabin today');
+    expect(clean).toBe('Sure! We have a cabin free — can you visit at 4pm?');
+    expect(clean).not.toContain('[[ALERT]]');
+  });
+  it('returns no reason for a normal reply and leaves it intact', () => {
+    const { reason, clean } = extractAlert('Our open desks start at ₹3,999/month.');
+    expect(reason).toBeNull();
+    expect(clean).toBe('Our open desks start at ₹3,999/month.');
+  });
+  it('tolerates spacing/colon variants and a misplaced line', () => {
+    const { reason, clean } = extractAlert('Yes, come over!\n[[ ALERT ]]: ready to pay now');
+    expect(reason).toBe('ready to pay now');
+    expect(clean).toBe('Yes, come over!');
+  });
+  it('falls back to a default reason when the token has no text', () => {
+    const { reason } = extractAlert('[[ALERT]]\nHello!');
+    expect(reason).toBeTruthy();
   });
 });
 
@@ -106,6 +137,13 @@ describe('normalizePhone', () => {
   });
   it('toWhatsappDigits prepends the country code', () => {
     expect(toWhatsappDigits('9494644848')).toBe('919494644848');
+  });
+  it('toWhatsappChatId builds a @c.us chat id and rejects junk', () => {
+    expect(toWhatsappChatId('7287820821')).toBe('917287820821@c.us');
+    expect(toWhatsappChatId('+91 72878 20821')).toBe('917287820821@c.us');
+    expect(toWhatsappChatId('919494644848')).toBe('919494644848@c.us');
+    expect(toWhatsappChatId('123')).toBeNull();
+    expect(toWhatsappChatId('')).toBeNull();
   });
 });
 

@@ -3,10 +3,52 @@
 // either delivers via the channel adapter (auto-send) or saves a draft.
 import prisma from '../lib/prisma';
 import { askClaude } from '../lib/brain';
-import { composeSystemPrompt, applyLinks, Source } from '../lib/training';
+import { composeSystemPrompt, applyLinks, extractAlert, Source } from '../lib/training';
+import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
 import { getAdapter } from '../channels/registry';
 import { InboundMessage } from '../channels/types';
+
+// Don't re-ping the owner about the same lead more than once per this window.
+const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// A customer contact id for display: strip channel suffix/prefix.
+function prettyContact(from: string): string {
+  return (from || '').replace(/@c\.us$/, '').replace(/^web:/, '');
+}
+
+// Fire-and-forget: WhatsApp the owner about a hot lead, via the agent's own
+// channel session. Deduped by Conversation.alertedAt. Never throws into the
+// reply path — a failed alert must not break the customer reply.
+async function alertOwner(agent: any, conv: any, inbound: InboundMessage, reason: string): Promise<void> {
+  try {
+    if (!agent.alertNumber) return;
+    const chatId = toWhatsappChatId(agent.alertNumber);
+    if (!chatId) return;
+    // Cooldown: skip if we already alerted on this lead recently.
+    const last = conv.alertedAt ? new Date(conv.alertedAt).getTime() : 0;
+    if (last && Date.now() - last < ALERT_COOLDOWN_MS) return;
+
+    const adapter = getAdapter(agent.channelType);
+    if (!adapter) return;
+    const who = conv.contactName && conv.contactName !== prettyContact(inbound.from)
+      ? `${conv.contactName} · ${prettyContact(inbound.from)}`
+      : prettyContact(inbound.from);
+    const said = (inbound.text || '').trim().slice(0, 180);
+    const body =
+      `🔥 Hot lead on *${agent.name}*\n` +
+      `${who}\n` +
+      `${reason}\n\n` +
+      `They said: "${said}"\n\n` +
+      `👉 Contact them now to get them onboarded.`;
+
+    await adapter.send(agent.id, chatId, body);
+    await prisma.conversation.update({ where: { id: conv.id }, data: { alertedAt: new Date(), leadStatus: conv.leadStatus === 'new' ? 'qualified' : conv.leadStatus } });
+    realtime.emit(agent.id, 'alert', { conversationId: conv.id, reason });
+  } catch (e: any) {
+    console.error('owner alert failed:', e?.message || e);
+  }
+}
 
 const ACKS = new Set([
   'ok', 'okay', 'k', 'kk', 'thanks', 'thank you', 'ty', 'thx', 'thankyou',
@@ -34,11 +76,14 @@ async function loadTraining(agentId: string): Promise<{ profile: any; sources: S
 }
 
 // Test Console: compose + call Claude for one message (no send, no log).
-export async function draftFor(agent: any, message: string): Promise<string> {
+// Returns the clean customer reply and, if the model flagged it, the urgent reason
+// so the owner can see the alert this message WOULD have triggered.
+export async function draftFor(agent: any, message: string): Promise<{ draft: string; urgentReason: string | null }> {
   const { profile, sources } = await loadTraining(agent.id);
   const system = composeSystemPrompt(agent, profile, sources);
-  const draft = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`) });
-  return applyLinks(draft, sources);
+  const raw = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`) });
+  const { reason, clean } = extractAlert(raw);
+  return { draft: applyLinks(clean, sources), urgentReason: reason };
 }
 
 export interface ProcessResult {
@@ -115,7 +160,11 @@ export async function processInbound(agentId: string, inbound: InboundMessage): 
     return { status: 'needs_human', conversationId: conv.id };
   }
 
-  draft = applyLinks(draft, sources);
+  // Pull out any urgent-lead signal and strip it from the customer-facing reply.
+  const { reason: urgentReason, clean } = extractAlert(draft);
+  if (urgentReason) { await alertOwner(agent, conv, inbound, urgentReason); }
+  draft = applyLinks(clean, sources);
+  if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert line
   await prisma.usageEvent.create({ data: { orgId: agent.orgId, agentId } });
 
   if (agent.autoSend) {

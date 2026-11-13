@@ -1,7 +1,7 @@
 // WhatsApp channel adapter (whatsapp-web.js). One Client per agent. Normalises
 // inbound messages to InboundMessage and registers itself in the adapter registry.
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg as any;
+const { Client, LocalAuth, MessageMedia } = pkg as any;
 import qrcode from 'qrcode';
 import path from 'path';
 import prisma from '../lib/prisma';
@@ -77,6 +77,27 @@ export async function sendText(agentId: string, to: string, text: string) {
   const c = clients.get(agentId);
   if (!c) throw new Error('agent session not connected');
   await c.sendMessage(to, text);
+}
+
+// --- TEMPORARY: promo send smoke test (used by the gated /test-send route). ---
+// Additive helpers; the existing reply paths above are untouched. Safe to remove
+// once the Trackly → outbound integration is built for real.
+
+// Resolve + validate a number on WhatsApp; returns the chat id (…@c.us) or null.
+export async function resolveNumber(agentId: string, digits: string): Promise<string | null> {
+  const c = clients.get(agentId);
+  if (!c) throw new Error('agent session not connected');
+  const id = await c.getNumberId(digits);
+  return id ? id._serialized : null;
+}
+
+// Send an image (from a URL) with an optional caption, or fall back to text.
+export async function sendMedia(agentId: string, to: string, mediaUrl: string, caption?: string): Promise<string | null> {
+  const c = clients.get(agentId);
+  if (!c) throw new Error('agent session not connected');
+  const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
+  const msg = await c.sendMessage(to, media, caption ? { caption } : {});
+  return msg?.id?._serialized || null;
 }
 
 export function restoreSessions(ids: string[]) {

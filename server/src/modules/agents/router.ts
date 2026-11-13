@@ -10,6 +10,7 @@ import { trainingSummary, Source } from '../../lib/training';
 import { getTemplate } from '../../lib/templates';
 import { validate } from '../../middleware/validate';
 import { createAgentSchema, sourceSchema } from '../../lib/schemas';
+import { normalizePhone, toWhatsappDigits } from '../../lib/phone';
 
 const router = Router();
 
@@ -56,6 +57,13 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   if (req.body?.hoursEnd === null || typeof req.body?.hoursEnd === 'number') data.hoursEnd = req.body.hoursEnd;
   if (typeof req.body?.timezone === 'string') data.timezone = req.body.timezone;
   if (req.body?.channelConfig && typeof req.body.channelConfig === 'object') data.channelConfig = JSON.stringify(req.body.channelConfig);
+  // Urgent-lead alert number (null/empty clears). Validate as an Indian mobile.
+  if (req.body?.alertNumber === null || req.body?.alertNumber === '') data.alertNumber = null;
+  else if (typeof req.body?.alertNumber === 'string') {
+    const norm = normalizePhone(req.body.alertNumber);
+    if (!norm) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number for alerts.' });
+    data.alertNumber = norm;
+  }
   const updated = await prisma.agent.update({ where: { id: agent(req).id }, data });
   res.json(updated);
 }));
@@ -160,7 +168,8 @@ scoped.post('/test', asyncHandler(async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ error: 'message required' });
   try {
-    res.json({ draft: await draftFor(agent(req), message) });
+    const { draft, urgentReason } = await draftFor(agent(req), message);
+    res.json({ draft, urgentReason });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'failed' });
   }
@@ -220,6 +229,33 @@ scoped.post('/messages/:mid/skip', asyncHandler(async (req, res) => {
   if (!msg || msg.agentId !== agent(req).id) return res.status(404).json({ error: 'message not found' });
   await prisma.message.update({ where: { id: msg.id }, data: { status: 'skipped' } });
   res.json({ ok: true });
+}));
+
+// --- TEMPORARY: promo send smoke test (Trackly → WhatsApp proof) --------------
+// Owner-only, org-scoped (requireAgent). Disabled unless TEST_SEND_ENABLED=true.
+// Body: { to: "<10-digit>", text?: string, mediaUrl?: string }. Remove after testing.
+scoped.post('/test-send', asyncHandler(async (req, res) => {
+  if (process.env.TEST_SEND_ENABLED !== 'true') return res.status(403).json({ error: 'test-send disabled' });
+  const a = agent(req);
+  if (a.channelType !== 'whatsapp-web') return res.status(400).json({ error: 'not a whatsapp-web agent' });
+  const to10 = normalizePhone(String(req.body?.to || ''));
+  if (!to10) return res.status(400).json({ error: 'valid Indian mobile required in `to`' });
+  const text = typeof req.body?.text === 'string' ? req.body.text : '';
+  const mediaUrl = typeof req.body?.mediaUrl === 'string' ? req.body.mediaUrl.trim() : '';
+  if (!text && !mediaUrl) return res.status(400).json({ error: 'text or mediaUrl required' });
+  const wa = require('../../channels/whatsapp');
+  let chatId: string | null;
+  try { chatId = await wa.resolveNumber(a.id, toWhatsappDigits(to10)); }
+  catch (e: any) { return res.status(409).json({ error: e?.message || 'session not connected' }); }
+  if (!chatId) return res.status(422).json({ error: 'number is not on WhatsApp' });
+  try {
+    const messageId = mediaUrl
+      ? await wa.sendMedia(a.id, chatId, mediaUrl, text || undefined)
+      : (await wa.sendText(a.id, chatId, text), 'sent');
+    res.json({ ok: true, to: to10, messageId });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'send failed' });
+  }
 }));
 
 router.use('/:id', scoped);

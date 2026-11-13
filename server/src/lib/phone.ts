@@ -10,3 +10,15 @@ export function normalizePhone(input: string): string | null {
 
 // What the WhatsApp Cloud API wants in `to`: country code + number, digits only.
 export const toWhatsappDigits = (phone10: string) => '91' + phone10;
+
+// Build a whatsapp-web.js chat id ("<countrycode><number>@c.us") from any
+// reasonable input (local 10-digit, 0-prefixed, or already country-coded).
+// Returns null if it can't be made into a plausible number.
+export function toWhatsappChatId(input: string): string | null {
+  let p = String(input || '').replace(/\D/g, '');
+  if (!p) return null;
+  const local = normalizePhone(p);
+  if (local) return '91' + local + '@c.us';      // Indian mobile → +91
+  if (p.length >= 11 && p.length <= 15) return p + '@c.us'; // already country-coded
+  return null;
+}

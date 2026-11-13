@@ -9,6 +9,25 @@ export interface Source {
   enabled: boolean;
 }
 
+// Control token the model emits on its own first line for a hot/urgent lead.
+// The engine strips this line before the customer sees it and uses the reason
+// to alert the owner. Deliberately distinctive so it never collides with prose.
+export const ALERT_TOKEN = '[[ALERT]]';
+
+// Pull a leading "[[ALERT]] <reason>" line out of a draft. Returns the reason
+// (or null) and the cleaned reply with any such line removed, so the customer
+// never sees the control token even if the model misplaces it.
+export function extractAlert(text: string): { reason: string | null; clean: string } {
+  if (!text) return { reason: null, clean: text };
+  let reason: string | null = null;
+  const kept = text.split('\n').filter((line) => {
+    const m = line.match(/^\s*\[\[\s*ALERT\s*\]\]\s*:?\s*(.*)$/i);
+    if (m) { if (!reason) reason = (m[1] || '').trim() || 'customer wants to get started urgently'; return false; }
+    return true;
+  });
+  return { reason, clean: kept.join('\n').trim() };
+}
+
 export function composeSystemPrompt(agent: any, profile: any, sources: Source[]): string {
   const on = sources.filter((s) => s.enabled);
   const facts = on.filter((s) => s.type === 'fact').map((s) => `- ${s.data.content}`);
@@ -41,6 +60,22 @@ export function composeSystemPrompt(agent: any, profile: any, sources: Source[])
 
   const esc = profile?.escalationKeyword || 'NEEDS_HUMAN';
   parts.push(`If a message is a complaint, refund/payment dispute, or anything sensitive, reply with exactly: ${esc}`);
+
+  // Urgent-lead alerting (only when the owner has set an alert number). The model
+  // signals a hot lead with a control line that the system strips before sending.
+  if (agent?.alertNumber) {
+    parts.push(
+      `URGENT LEAD ALERTS:\n` +
+      `A lead is URGENT when the customer clearly wants to get started / onboarded / visit SOON — ` +
+      `e.g. "need a desk today", "can I come now / in an hour", "need it urgently / immediately / by tomorrow", ` +
+      `"ready to pay / book now", or strong buying intent with time pressure. ` +
+      `Simple price/info questions are NOT urgent.\n` +
+      `When (and only when) the lead is urgent, make the VERY FIRST LINE of your output exactly:\n` +
+      `${ALERT_TOKEN} <6-10 word reason, e.g. "wants to book a cabin, visiting today">\n` +
+      `Then on the next line write your normal, warm reply to the customer. ` +
+      `Never mention this alert line to the customer and never write ${ALERT_TOKEN} when it is not urgent.`,
+    );
+  }
 
   return parts.join('\n\n');
 }

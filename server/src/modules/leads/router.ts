@@ -16,7 +16,7 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(convs.map((c) => ({
     id: c.id, agentId: c.agentId, contactName: c.contactName, contactNumber: c.contactNumber,
     leadStatus: c.leadStatus, leadNotes: c.leadNotes, lastMessageAt: c.lastMessageAt,
-    agentName: c.agent?.name, channelType: c.agent?.channelType,
+    alertedAt: c.alertedAt, agentName: c.agent?.name, channelType: c.agent?.channelType,
   })));
 }));
 

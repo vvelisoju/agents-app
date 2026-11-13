@@ -45,8 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-[100dvh] justify-center overflow-hidden">
-      {/* Fixed-width app frame — header, sidebar, content and footer all live inside it. */}
-      <div className="flex h-full w-full max-w-7xl flex-col overflow-hidden md:border-x md:border-border md:shadow-2xl md:shadow-black/30">
+      {/* App frame fills the viewport edge-to-edge (no side borders/gaps); on very
+          large monitors it caps to a comfortable fixed width and centres. */}
+      <div className="flex h-full w-full max-w-[1920px] flex-col overflow-hidden">
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border glass px-3 md:px-4" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <button className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted md:block" onClick={toggleSidebar} aria-label="Toggle sidebar"><Menu size={20} /></button>
