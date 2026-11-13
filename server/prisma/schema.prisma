@@ -1,0 +1,128 @@
+// Multi-agent SaaS schema. Dev datasource is SQLite so it runs with zero setup;
+// switch `provider` to "postgresql" + add pgvector for production (see docs/DATA_MODEL.md).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Org {
+  id           String        @id @default(uuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  users        User[]
+  agents       Agent[]
+  subscription Subscription?
+}
+
+model User {
+  id           String   @id @default(uuid())
+  orgId        String
+  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email        String   @unique
+  passwordHash String
+  token        String   @unique
+  role         String   @default("owner")
+  createdAt    DateTime @default(now())
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  orgId     String   @unique
+  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan      String   @default("free")
+  status    String   @default("active")
+  maxAgents Int      @default(10)
+  createdAt DateTime @default(now())
+}
+
+model Agent {
+  id            String           @id @default(uuid())
+  orgId         String
+  org           Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name          String
+  channelType   String           @default("whatsapp-web")
+  status        String           @default("draft")
+  autoSend      Boolean          @default(false)
+  paused        Boolean          @default(false)
+  awayMessage   String?
+  hoursStart    Int?
+  hoursEnd      Int?
+  timezone      String           @default("Asia/Kolkata")
+  createdAt     DateTime         @default(now())
+  profile       TrainingProfile?
+  sources       TrainingSource[]
+  conversations Conversation[]
+  session       ChannelSession?
+}
+
+model ChannelSession {
+  id              String    @id @default(uuid())
+  agentId         String    @unique
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  status          String    @default("pending_qr")
+  phoneNumber     String?
+  lastConnectedAt DateTime?
+  updatedAt       DateTime  @updatedAt
+}
+
+model TrainingProfile {
+  id                String   @id @default(uuid())
+  agentId           String   @unique
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  instructions      String   @default("")
+  restrictions      String   @default("")
+  tone              String   @default("warm, concise, helpful")
+  language          String   @default("match the customer")
+  escalationKeyword String   @default("NEEDS_HUMAN")
+  updatedAt         DateTime @updatedAt
+}
+
+model TrainingSource {
+  id        String   @id @default(uuid())
+  agentId   String
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  type      String // 'fact' | 'link' | 'faq'
+  dataJson  String // JSON: {content} | {name,url} | {question,answer}
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  agentId       String
+  agent         Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  orgId         String
+  contactNumber String
+  contactName   String?
+  lastMessageAt DateTime  @default(now())
+  takenOver     Boolean   @default(false)
+  muted         Boolean   @default(false)
+  leadStatus    String    @default("new")
+  leadNotes     String?
+  messages      Message[]
+
+  @@unique([agentId, contactNumber])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agentId        String
+  direction      String // 'inbound' | 'outbound'
+  body           String
+  status         String // received | draft | sent | skipped | needs_human
+  createdAt      DateTime     @default(now())
+}
+
+model UsageEvent {
+  id        String   @id @default(uuid())
+  orgId     String
+  agentId   String
+  type      String   @default("reply")
+  createdAt DateTime @default(now())
+}

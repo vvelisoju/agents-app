@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure Agents — Platform (skeleton)</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; --line:#334155; --good:#22c55e; --warn:#f59e0b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+    header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    header b { font-size:16px; }
+    main { max-width:920px; margin:0 auto; padding:20px 16px 60px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+    h2 { font-size:15px; margin:0 0 10px; }
+    h3 { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:18px 0 8px; }
+    label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+    input, textarea, select { width:100%; background:#0b1220; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; }
+    textarea { min-height:60px; resize:vertical; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; font:inherit; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--ink); }
+    button.sm { padding:5px 10px; font-size:12px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .muted { color:var(--muted); font-size:13px; }
+    .pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+    .pill.connected { color:var(--good); border-color:var(--good); }
+    .pill.pending_qr, .pill.connecting { color:var(--warn); border-color:var(--warn); }
+    .list-item { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); }
+    .hide { display:none; }
+    #qrbox img { width:230px; height:230px; background:#fff; border-radius:8px; padding:6px; }
+    pre.draft { white-space:pre-wrap; background:#0b1220; border:1px solid var(--line); border-radius:8px; padding:10px; }
+    a { color:var(--accent); }
+    .learn { background:#13213b; border:1px solid var(--accent); border-radius:10px; padding:14px; margin:2px 0 14px; }
+    .learn b { font-size:14px; }
+    .learn .ex { color:var(--muted); font-size:12px; margin-top:6px; }
+    details.manual { margin-top:14px; border-top:1px solid var(--line); padding-top:6px; }
+    details.manual > summary { cursor:pointer; color:var(--muted); font-size:13px; padding:8px 0; list-style:none; }
+    details.manual > summary::-webkit-details-marker { display:none; }
+    details.manual > summary::before { content:"▸ "; }
+    details.manual[open] > summary::before { content:"▾ "; }
+    .flash { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; transition:outline-color .25s; }
+    .spin { opacity:.65; }
+  </style>
+</head>
+<body>
+  <header>
+    <b>Secure Agents <span class="muted" style="font-weight:400">· Phase 1 skeleton</span></b>
+    <span id="who" class="row"></span>
+  </header>
+  <main>
+    <!-- AUTH -->
+    <section id="authView" class="card hide">
+      <h2>Sign in</h2>
+      <label>Email</label><input id="email" type="email" placeholder="you@business.com" />
+      <label>Password</label><input id="password" type="password" placeholder="••••••" />
+      <div class="row" style="margin-top:12px">
+        <button onclick="doAuth('login')">Log in</button>
+        <button class="ghost" onclick="doAuth('signup')">Sign up</button>
+      </div>
+      <p id="authErr" class="muted"></p>
+    </section>
+
+    <!-- AGENTS LIST -->
+    <section id="agentsView" class="card hide">
+      <h2>Your WhatsApp agents</h2>
+      <div id="agentList"></div>
+      <h3>Add an agent</h3>
+      <div class="row">
+        <input id="newAgentName" placeholder="e.g. Secure Studio — main number" style="flex:1" />
+        <button onclick="addAgent()">Add agent</button>
+      </div>
+      <p class="muted">Add as many as you like — each links its own WhatsApp number.</p>
+    </section>
+
+    <!-- AGENT DETAIL -->
+    <section id="agentView" class="hide">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="agentName" style="margin:0"></h2>
+          <span class="row">
+            <span id="agentStatus" class="pill">draft</span>
+            <button class="ghost sm" onclick="showAgents()">← All agents</button>
+          </span>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button onclick="connectAgent()">Connect / show QR</button>
+          <button class="ghost" onclick="disconnectAgent()">Disconnect</button>
+          <label class="row" style="margin:0; gap:6px"><input type="checkbox" id="autoSend" style="width:auto" onchange="toggleAuto()" /> auto-send replies</label>
+        </div>
+        <div id="qrbox" class="hide" style="margin-top:14px">
+          <p class="muted">Open WhatsApp → Settings → Linked Devices → Link a device, then scan:</p>
+          <img id="qrimg" alt="QR code" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Training</h2>
+        <p id="trainSummary" class="muted"></p>
+
+        <!-- HERO: set the agent up from a link, no typing -->
+        <div class="learn">
+          <b>Set up your agent from a link</b>
+          <p class="muted" style="margin:4px 0 10px">
+            Paste your website, Google, Instagram or Facebook link — the agent reads it and sets
+            itself up. Add as many links as you like; type nothing unless you want to.
+          </p>
+          <div class="row">
+            <input id="learnUrl" placeholder="https://your-business.com  ·  g.page/…  ·  instagram.com/…" style="flex:1"
+                   onkeydown="if(event.key==='Enter')learnLink()" />
+            <button id="learnBtn" onclick="learnLink()">Train from link</button>
+          </div>
+          <p id="learnStatus" class="muted" style="margin:10px 0 0"></p>
+        </div>
+
+        <h3>What your agent knows</h3>
+        <div id="sourceList"></div>
+        <div class="row" style="margin-top:10px">
+          <select id="srcType" style="width:120px" onchange="renderSrcInputs()">
+            <option value="fact">Fact</option>
+            <option value="link">Link</option>
+            <option value="faq">FAQ</option>
+          </select>
+          <span id="srcInputs" style="flex:1"></span>
+          <button onclick="addSource()">Add</button>
+        </div>
+
+        <!-- Everything below is optional: edit by hand if you want to -->
+        <details class="manual" id="manualBox">
+          <summary>Edit instructions &amp; tone by hand (optional)</summary>
+          <label>Instructions</label><textarea id="instructions"></textarea>
+          <label>Restrictions (never break these)</label><textarea id="restrictions"></textarea>
+          <div class="row">
+            <div style="flex:1"><label>Tone</label><input id="tone" /></div>
+            <div style="flex:1"><label>Language</label><input id="language" /></div>
+          </div>
+          <div class="row" style="margin-top:12px"><button onclick="saveProfile()">Update instructions</button></div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>Test console</h2>
+        <p class="muted">Type a customer message and see the draft — nothing is sent.</p>
+        <div class="row"><input id="testMsg" placeholder="What are your prices?" style="flex:1" /><button onclick="runTest()">Test</button></div>
+        <pre id="testOut" class="draft hide"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Conversations</h2>
+        <div id="convList" class="muted">No conversations yet.</div>
+        <div id="msgList"></div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

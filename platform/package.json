@@ -1,0 +1,31 @@
+{
+  "name": "secure-agents-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Phase 1 skeleton for the multi-agent SaaS: signup, add a WhatsApp agent via QR, train it, it replies.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "setup-browser": "npx puppeteer browsers install chrome"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "better-sqlite3": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "qrcode": "latest",
+    "whatsapp-web.js": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/qrcode": "latest",
+    "@types/ws": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}

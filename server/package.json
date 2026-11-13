@@ -1,0 +1,44 @@
+{
+  "name": "secure-agents-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-agent SaaS API — Express + Prisma (ClassPe-aligned), ported from the platform skeleton.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push --skip-generate",
+    "test": "vitest run",
+    "setup-browser": "npx puppeteer browsers install chrome"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "express-rate-limit": "latest",
+    "helmet": "latest",
+    "qrcode": "latest",
+    "whatsapp-web.js": "latest",
+    "ws": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "latest",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/qrcode": "latest",
+    "@types/supertest": "^6.0.2",
+    "@types/ws": "latest",
+    "prisma": "^5.22.0",
+    "supertest": "^7.0.0",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "^2.1.8"
+  }
+}

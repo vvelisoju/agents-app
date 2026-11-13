@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Design tokens — a professional AI aesthetic.
+   Deep violet→cyan brand, near-black violet-tinted surfaces.
+   HSL channels consumed as hsl(var(--x)) in tailwind.config.ts.
+   Dark is default; light under :root.light.
+   ============================================================ */
+:root {
+  --background: 240 24% 6%;
+  --foreground: 240 20% 97%;
+  --card: 240 22% 9%;
+  --card-foreground: 240 20% 97%;
+  --muted: 240 16% 15%;
+  --muted-foreground: 240 10% 64%;
+  --primary: 258 89% 66%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 190 95% 55%;
+  --border: 240 15% 17%;
+  --input: 240 15% 17%;
+  --ring: 258 89% 66%;
+  --good: 152 76% 45%;
+  --warn: 38 92% 55%;
+  --destructive: 0 75% 58%;
+}
+
+:root.light {
+  --background: 240 30% 98%;
+  --foreground: 240 30% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 30% 12%;
+  --muted: 240 20% 94%;
+  --muted-foreground: 240 10% 42%;
+  --primary: 258 80% 58%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 190 90% 42%;
+  --border: 240 18% 88%;
+  --input: 240 18% 88%;
+  --ring: 258 80% 58%;
+  --good: 152 70% 38%;
+  --warn: 38 92% 45%;
+  --destructive: 0 72% 51%;
+}
+
+* { border-color: hsl(var(--border)); }
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+  /* Subtle AI "aurora" — violet + cyan glows fixed to the viewport. */
+  background-image:
+    radial-gradient(55rem 55rem at 85% -15%, hsl(258 89% 60% / 0.14), transparent 60%),
+    radial-gradient(45rem 45rem at -10% 5%, hsl(190 95% 55% / 0.10), transparent 55%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer utilities {
+  .brand-gradient { background-image: linear-gradient(135deg, hsl(258 89% 66%), hsl(190 95% 55%)); }
+  .brand-text {
+    background-image: linear-gradient(135deg, hsl(258 89% 74%), hsl(190 95% 64%));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .glass { background: hsl(var(--card) / 0.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .glow { box-shadow: 0 0 0 1px hsl(258 89% 66% / 0.25), 0 10px 40px -10px hsl(258 89% 66% / 0.45); }
+  .skeleton {
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.45) 37%, hsl(var(--muted)) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+}
+
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+@keyframes pulse-glow { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }

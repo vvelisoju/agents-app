@@ -1,0 +1,13 @@
+# Secrets — never commit this
+.env
+
+# Dependencies
+node_modules/
+
+# WhatsApp login session (contains your logged-in session — keep private, do NOT commit)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs / misc
+*.log
+.DS_Store
