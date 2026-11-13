@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getTheme, applyTheme, type Theme } from '@/lib/theme';
-import { emailFromMobile, mobileFromEmail, formatMobile } from '@/lib/auth';
+import { normalizeMobile, formatMobile } from '@/lib/auth';
 import { MobileInput } from '@/components/layout/AuthLayout';
 import { Moon, Sun, Globe, Trash2 } from 'lucide-react';
 
@@ -19,7 +19,7 @@ function PeopleCard() {
   const [mobile, setMobile] = React.useState('');
   const [password, setPassword] = React.useState('');
   const add = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/team', { email: emailFromMobile(mobile), password, role: 'member' }),
+    mutationFn: () => apiRequest('POST', '/api/team', { phone: normalizeMobile(mobile), password, role: 'member' }),
     onSuccess: () => { setMobile(''); setPassword(''); invalidate(); toast('Teammate added', 'good'); },
     onError: (e: any) => toast(e.status === 403 ? 'Only the owner can add teammates' : (e.message || 'Could not add'), 'warn'),
   });
@@ -31,7 +31,7 @@ function PeopleCard() {
       <div className="space-y-2">
         {team.map((u) => (
           <div key={u.id} className="flex items-center justify-between text-sm">
-            <span>{formatMobile(mobileFromEmail(u.email)) || u.email} <Badge>{u.role}</Badge></span>
+            <span>{formatMobile(u.phone)} <Badge>{u.role}</Badge></span>
             {u.role !== 'owner' && <button onClick={() => remove.mutate(u.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>}
           </div>
         ))}

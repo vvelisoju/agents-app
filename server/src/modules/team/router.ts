@@ -1,11 +1,12 @@
-// Team members (B2.5). Owner can add/remove members in the org. (Email-based
-// invites with delivery are B12.6; this is the working create-member baseline.)
+// Team members (B2.5). Owner can add/remove members in the org. Members are keyed
+// by phone, same as account signup; the owner sets an initial password for them.
 import { Router } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { validate } from '../../middleware/validate';
 import { addMemberSchema } from '../../lib/schemas';
 import { hashPassword, newToken } from '../../middleware/auth';
+import { normalizePhone } from '../../lib/phone';
 
 const router = Router();
 const u = (req: any) => req.user;
@@ -13,7 +14,7 @@ const u = (req: any) => req.user;
 router.get('/', asyncHandler(async (req, res) => {
   const members = await prisma.user.findMany({
     where: { orgId: u(req).orgId },
-    select: { id: true, email: true, role: true, createdAt: true },
+    select: { id: true, phone: true, role: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   });
   res.json(members);
@@ -21,12 +22,14 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.post('/', validate(addMemberSchema), asyncHandler(async (req, res) => {
   if (u(req).role !== 'owner') return res.status(403).json({ error: 'only the owner can add members', code: 'forbidden' });
-  const { email, password, role } = req.body;
-  if (await prisma.user.findUnique({ where: { email } })) return res.status(409).json({ error: 'email already registered' });
+  const phone = normalizePhone(req.body.phone);
+  if (!phone) return res.status(400).json({ error: 'enter a valid mobile number', code: 'invalid_phone' });
+  const { password, role } = req.body;
+  if (await prisma.user.findUnique({ where: { phone } })) return res.status(409).json({ error: 'this number is already registered', code: 'already_registered' });
   const m = await prisma.user.create({
-    data: { orgId: u(req).orgId, email, passwordHash: await hashPassword(password), token: newToken(), role: role === 'owner' ? 'owner' : 'member' },
+    data: { orgId: u(req).orgId, phone, passwordHash: await hashPassword(password), token: newToken(), role: role === 'owner' ? 'owner' : 'member' },
   });
-  res.json({ id: m.id, email: m.email, role: m.role });
+  res.json({ id: m.id, phone: m.phone, role: m.role });
 }));
 
 router.delete('/:userId', asyncHandler(async (req, res) => {

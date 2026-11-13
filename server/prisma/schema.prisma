@@ -22,11 +22,26 @@ model User {
   id           String   @id @default(uuid())
   orgId        String
   org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  email        String   @unique
+  phone        String   @unique // normalized 10-digit local mobile (digits only)
   passwordHash String
   token        String   @unique
   role         String   @default("owner")
   createdAt    DateTime @default(now())
+}
+
+// One-time codes for WhatsApp OTP (signup + password reset). Code is bcrypt-hashed.
+model PhoneVerification {
+  id         String    @id @default(uuid())
+  phone      String
+  codeHash   String
+  purpose    String // 'signup' | 'password_reset'
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose])
 }
 
 model Subscription {

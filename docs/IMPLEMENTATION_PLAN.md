@@ -26,7 +26,7 @@ Aligned to the core requirement: **end-to-end functionality first**, subscriptio
 
 ## API surface (Phase 1)
 
-- **Auth:** `POST /auth/signup`, `POST /auth/login`, `GET /me`
+- **Auth:** `POST /auth/signup/start` + `/auth/signup/verify` (phone OTP), `POST /auth/login`, `POST /auth/forgot` + `/auth/reset`, `GET /me`
 - **Agents:** `GET/POST /agents`, `GET/PATCH/DELETE /agents/:id`, `POST /agents/:id/connect`
   (start session + QR), `POST /agents/:id/disconnect`
 - **Realtime:** `WS /agents/:id/events` — `qr`, `status`, `message`

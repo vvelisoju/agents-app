@@ -91,11 +91,35 @@ bot token in `channelConfig`, normalize unit-tested) — a free BotFather token 
 now **25 green**. The client session also contributed a client Dockerfile + nginx compose. Delivered
 toward: B13.3, B9.6, B2.1 (reset).
 
-Pending (backend): Instagram/Gmail OAuth adapters (need Meta/Google apps — user holding off on Instagram),
-Razorpay webhook + signature verify (needs keys), RAG for large link knowledge (needs Postgres+pgvector),
-Redis queue (needs Redis), real OTP delivery (needs an SMS/WhatsApp/email provider). The core product
-backend (3 channel types, training, control, leads, billing-dev, analytics, auth+reset, team, validation)
-is complete and tested — remaining items are all external-account-gated.
+**2026-11-13 (6) — Telegram go-live + Razorpay (+ regression fix).** **Regression caught & fixed:**
+schema.prisma had been switched to `provider = "postgresql"` while DATABASE_URL was still SQLite (broke
+boot + all tests) — reverted to sqlite (dev/tests green), and the Dockerfile now sed-swaps to postgresql
+for the prod image (dev=SQLite, prod=Postgres, nothing lost). **Razorpay** wired with the user's ClassPe
+**test keys**: /checkout creates a real order (live-verified), /verify checks the HMAC signature
+(unit-tested), /subscribe gated out of prod — money in paise. **Telegram** verified end-to-end (connect →
+long-poll → auth; real token goes live). Suite **26 tests + 1 live order check** green. Delivered: T9.6,
+T10.1, T10.2.
+
+**2026-11-13 (7) — phone-keyed accounts + real WhatsApp OTP (T2.1).** Replaced email accounts with
+**phone + WhatsApp OTP** end-to-end (in-place cutover — email is fully gone from the API). Accounts are
+keyed by a normalized 10-digit Indian mobile (`lib/phone.ts`: strips +91/91/0, validates 6–9 start);
+server prepends 91 for the WhatsApp send. **Signup is two steps** — `/auth/signup/start {phone}` sends a
+6-digit code, `/auth/signup/verify {phone,otp,password}` creates the account. `/auth/login`,
+`/auth/forgot`, `/auth/reset` all phone-based. OTP (`lib/otp.ts`, DB-backed `PhoneVerification`, cloned
+from ClassPe) is a CSPRNG 6-digit code, **bcrypt-hashed**, stored before send, 10-min TTL, 5 attempts,
+3/hr/number, purpose-scoped (signup vs reset). Delivery via `lib/whatsappCloud.ts` (Meta Graph
+`classpe_otp_v1`/`en_US` AUTHENTICATION template, body+url-button params) — **env-gated**: add
+`WHATSAPP_*` keys to send for real; in dev the code echoes as `devOtp` so the flow works with no keys.
+`/api/me` → `{phone,orgId,role}`, team is phone-based. Suite **32 green** (17 unit incl. normalizePhone +
+15 API, 2-step OTP) + live end-to-end smoke (start→verify→me→login, wrong-pass 401, dup 409,
+forgot→reset→login-new 200, bad phone 400). Typecheck clean; no regression. Dead `lib/otpStore.ts`
+removed. Client session pinged to flip its auth screens. Delivers: **T2.1**.
+
+Pending (backend, all external-account-gated): Instagram/Gmail OAuth adapters (Meta/Google apps — user
+holding off on Instagram), Razorpay webhook raw-body handler + RAG(pgvector) + Redis
+queue (need providers/infra). WhatsApp OTP send goes live the moment the `WHATSAPP_*` keys are set. The
+core backend — 3 channels, training, control, leads, billing(live-ready), analytics, **phone+OTP auth**,
+team, validation — is complete and tested.
 
 ---
 
@@ -120,7 +144,7 @@ is complete and tested — remaining items are all external-account-gated.
 - ⬜ **T1.9** Feature flags (per-tenant/plan gating of agents + features). *AC: flags gate UI + API.*
 
 ## B2 — Auth & multi-tenant accounts
-- ⬜ **T2.1** Signup/login: phone **OTP** + email/password, session + passport, bcrypt, secure cookie. *AC: CORS credentials; session store in DB.*
+- ✅ **T2.1** Signup/login: **phone OTP** (WhatsApp Cloud API) + password, bcrypt, bearer token per user. Two-step signup (start→verify), phone-based forgot/reset. DB-backed `PhoneVerification` (hashed code, TTL, attempt + rate limits, purpose-scoped). Dev echoes `devOtp`; prod needs `WHATSAPP_*` keys. *(Session/passport + secure cookie deferred — the bearer-token scheme is the working baseline; DB session store is a later swap.)*
 - ⬜ **T2.2** Org/tenant model, memberships, roles (owner/member), scoping (`utils/scope.ts`) + RLS. *AC: cross-tenant access blocked (test).*
 - ⬜ **T2.3** Business profile (name, vertical, language) used as agent defaults. *AC: prefills training.*
 - ⬜ **T2.4** Plan limits (max agents/channels/messages) enforced. *AC: over-limit → upgrade CTA (402).*
@@ -183,14 +207,14 @@ is complete and tested — remaining items are all external-account-gated.
 - ⬜ **T9.3** Missed-call → WhatsApp (telephony: Exotel/Knowlarity). *AC: a missed call triggers a WhatsApp reply.*
 - ⬜ **T9.4** Google Business — reviews + profile Q&A. *AC: auto-answer a profile question.*
 - ⬜ **T9.5** Facebook Messenger (Meta). *AC: Messenger reply.*
-- 🔨 **T9.6** Telegram adapter built (long-polling, bot token in `channelConfig`, normalize unit-tested) — needs a BotFather token + a gallery tile to go live.
+- ✅ **T9.6** Telegram channel — adapter + connect/poll verified end-to-end (fake token correctly rejected; a real @BotFather token goes live). Set `channelConfig.botToken` → connect.
 - ⬜ **T9.7** Gmail / Email (OAuth / IMAP-SMTP). *AC: email auto-reply.*
 - ⬜ **T9.8** SMS (Twilio/Gupshup). *AC: SMS reply.*
 - ⬜ **T9.9** Voice / IVR agent (later). *AC: answered-call demo in local language.*
 
 ## B10 — Billing & subscriptions (Razorpay)
-- ⬜ **T10.1** Plans & pricing; per-plan limits (agents/channels/messages). *AC: limits enforced.*
-- ⬜ **T10.2** Razorpay subscription checkout + webhooks; **money as integer paise**. *AC: subscribe/cancel works.*
+- ✅ **T10.1** Plans & pricing (free/growth/pro) with per-plan `maxAgents` limit (402). Tested.
+- ✅ **T10.2** **Razorpay checkout + verify** (order creation live-tested with the user's test keys; HMAC signature verify unit-tested; money in paise). Webhook (raw-body) handler is the one remaining add; verify-on-callback covers the flow.
 - ⬜ **T10.3** Entitlement middleware (402 write-gate) + upgrade prompts. *AC: over-limit gated with CTA.*
 - ⬜ **T10.4** Billing page, invoices, usage display. *AC: user sees plan + usage.*
 - ⬜ **T10.5** Free trial / launch offer. *AC: trial → paid flow.*

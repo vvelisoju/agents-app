@@ -31,7 +31,7 @@ messaging channels. The first channel is **WhatsApp**. A signed-in user can:
 
 | | Phase 1 (MVP — end-to-end) | Later phases |
 |---|---|---|
-| Auth | Email/password signup + login | SSO, team seats |
+| Auth | Phone + WhatsApp-OTP signup + password login | SSO, team seats |
 | Subscription | Stubbed (free for all signed-up users) | **Razorpay** billing + plan limits |
 | WhatsApp | **QR login** (whatsapp-web.js), many agents | Official **Cloud API** for scale |
 | Training | Instructions, restrictions, links, facts, test console | Auto-learning from past chats, analytics |

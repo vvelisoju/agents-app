@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthLayout, MobileInput } from '@/components/layout/AuthLayout';
-import { emailFromMobile, isValidMobile } from '@/lib/auth';
+import { normalizeMobile, isValidMobile } from '@/lib/auth';
 
 export function Login() {
   const { login } = useAuth();
@@ -19,7 +19,7 @@ export function Login() {
     if (!isValidMobile(mobile)) return toast('Enter your 10-digit mobile number', 'warn');
     if (!password) return toast('Enter your password', 'warn');
     setBusy(true);
-    try { await login(emailFromMobile(mobile), password); }
+    try { await login(normalizeMobile(mobile), password); }
     catch (e: any) { toast(e.status === 401 ? 'Wrong mobile number or password' : (e.message || 'Login failed'), 'destructive'); }
     finally { setBusy(false); }
   }

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthLayout, MobileInput } from '@/components/layout/AuthLayout';
-import { emailFromMobile, isValidMobile, formatMobile } from '@/lib/auth';
+import { normalizeMobile, isValidMobile, formatMobile } from '@/lib/auth';
 
 export function Forgot() {
   const { toast } = useToast();
@@ -20,7 +20,7 @@ export function Forgot() {
   const [password, setPassword] = React.useState('');
 
   const sendCode = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/auth/forgot', { email: emailFromMobile(mobile) }),
+    mutationFn: () => apiRequest('POST', '/api/auth/forgot', { phone: normalizeMobile(mobile) }),
     onSuccess: (r: any) => {
       if (r?.devOtp) { setOtp(r.devOtp); toast('Dev code auto-filled', 'good'); } // dev only
       else toast('If that number has an account, a code was sent to WhatsApp', 'good');
@@ -30,8 +30,8 @@ export function Forgot() {
   });
 
   const reset = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/auth/reset', { email: emailFromMobile(mobile), otp, password }),
-    onSuccess: (r: any) => { setSession(r.token, r.email); navigate('/agents'); }, // auto-login
+    mutationFn: () => apiRequest('POST', '/api/auth/reset', { phone: normalizeMobile(mobile), otp, password }),
+    onSuccess: (r: any) => { setSession(r.token, r.phone); navigate('/agents'); }, // auto-login
     onError: (e: any) => {
       if (e.code === 'invalid_otp') toast('That code is wrong or expired', 'warn');
       else if (e.status === 404) toast('No account found with this number', 'warn');

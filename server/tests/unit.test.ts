@@ -4,6 +4,7 @@ import { TEMPLATES, getTemplate } from '../src/lib/templates';
 import { normaliseUrl, extractReadable } from '../src/lib/learn';
 import { normalizeUpdate } from '../src/channels/telegram';
 import { verifyPaymentSignature } from '../src/lib/razorpay';
+import { normalizePhone, toWhatsappDigits } from '../src/lib/phone';
 import crypto from 'crypto';
 
 const agent = { name: 'Secure Studio' };
@@ -86,6 +87,25 @@ describe('razorpay signature', () => {
     expect(verifyPaymentSignature('order_1', 'pay_1', sig)).toBe(true);
     expect(verifyPaymentSignature('order_1', 'pay_1', 'deadbeef')).toBe(false);
     process.env.RAZORPAY_KEY_SECRET = prev;
+  });
+});
+
+describe('normalizePhone', () => {
+  it('accepts a plain 10-digit mobile', () => {
+    expect(normalizePhone('9494644848')).toBe('9494644848');
+  });
+  it('strips +91 / 91 / 0 prefixes and spacing', () => {
+    expect(normalizePhone('+91 94946 44848')).toBe('9494644848');
+    expect(normalizePhone('919494644848')).toBe('9494644848');
+    expect(normalizePhone('09494644848')).toBe('9494644848');
+  });
+  it('rejects non-mobile / wrong-length numbers', () => {
+    expect(normalizePhone('1234567890')).toBeNull(); // must start 6–9
+    expect(normalizePhone('94946')).toBeNull();
+    expect(normalizePhone('')).toBeNull();
+  });
+  it('toWhatsappDigits prepends the country code', () => {
+    expect(toWhatsappDigits('9494644848')).toBe('919494644848');
   });
 });
 

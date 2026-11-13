@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MessageCircle, Globe, Download, ChevronRight } from 'lucide-react';
+import { channelMeta } from '@/config/channels';
+import { Download, ChevronRight } from 'lucide-react';
 
 const STAGES = ['new', 'qualified', 'won', 'lost'] as const;
 const stageTone: Record<string, 'default' | 'primary' | 'good' | 'warn'> = {
@@ -27,13 +28,14 @@ function LeadCard({ lead, navigate }: { lead: any; navigate: (to: string) => voi
     onError: (e: any) => toast(e.message || 'Could not update', 'destructive'),
   });
 
-  const ChannelIcon = lead.channelType === 'website' ? Globe : MessageCircle;
+  const m = channelMeta(lead.channelType);
+  const ChannelIcon = m.icon;
 
   return (
     <Card className="overflow-hidden">
       <button className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-muted/40" onClick={() => setOpen((v) => !v)}>
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted"><ChannelIcon size={15} /></span>
+          <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-md', m.badge)}><ChannelIcon size={15} /></span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{lead.contactName || displayContact(lead.contactNumber)}</span>
             <span className="block truncate text-xs text-muted-foreground">{lead.agentName} · {timeAgo(lead.lastMessageAt)}</span>

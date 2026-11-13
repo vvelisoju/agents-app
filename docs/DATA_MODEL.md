@@ -7,7 +7,13 @@ Vector columns use the `pgvector` extension (added when RAG lands — see TRAINI
 `id`, `name`, `created_at`
 
 ### users
-`id`, `org_id`, `email` (unique), `password_hash`, `role` (`owner` | `member`), `created_at`
+`id`, `org_id`, `phone` (unique — normalized 10-digit local mobile), `password_hash`,
+`token` (unique bearer), `role` (`owner` | `member`), `created_at`
+
+### phone_verifications — *WhatsApp OTP (signup + password reset)*
+`id`, `phone`, `code_hash` (bcrypt), `purpose` (`signup` | `password_reset`), `attempts`,
+`expires_at`, `verified_at`, `consumed_at`, `created_at` — indexed on (`phone`, `purpose`).
+CSPRNG 6-digit code, 10-min TTL, 5 attempts, 3/hr/number. Delivered via the WhatsApp Cloud API.
 
 ### subscriptions — *stubbed in Phase 1*
 `id`, `org_id`, `plan` (`free` | `starter` | `growth`), `status` (`active` | `trialing` | `none`),

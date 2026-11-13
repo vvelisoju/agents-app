@@ -1,24 +1,17 @@
-// Mobile-number auth. India uses mobile numbers, not email. The (frozen)
-// backend is email+password, so we map a mobile number to a stable internal
-// identifier — the user only ever sees/enters their mobile number.
-const DOMAIN = '@phone.secureagents';
+// Phone-number auth (India). Accounts are keyed by a 10-digit mobile number;
+// the server normalizes +91/91/0 prefixes, so the client sends the local 10 digits.
 
-export const normalizeMobile = (m: string) => (m || '').replace(/\D/g, '').replace(/^0+/, '');
-
-export const emailFromMobile = (m: string) => normalizeMobile(m) + DOMAIN;
-
-export const mobileFromEmail = (e: string | null | undefined) =>
-  e && e.endsWith(DOMAIN) ? e.slice(0, -DOMAIN.length) : (e || '');
+export function normalizeMobile(m: string): string {
+  let d = (m || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('91')) d = d.slice(2);
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+  return d;
+}
 
 export function formatMobile(value: string): string {
   const d = normalizeMobile(value);
-  const local = d.length === 12 && d.startsWith('91') ? d.slice(2) : d;
-  if (local.length === 10) return '+91 ' + local.slice(0, 5) + ' ' + local.slice(5);
-  return d ? '+' + d : '';
+  if (d.length === 10) return '+91 ' + d.slice(0, 5) + ' ' + d.slice(5);
+  return d ? '+91 ' + d : '';
 }
 
-// A valid Indian mobile: 10 digits (optionally with 91 country code).
-export const isValidMobile = (m: string) => {
-  const d = normalizeMobile(m);
-  return d.length === 10 || (d.length === 12 && d.startsWith('91'));
-};
+export const isValidMobile = (m: string) => normalizeMobile(m).length === 10;

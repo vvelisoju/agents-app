@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
+import { MessageCircle, Zap, Trophy, type LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
-function Tile({ label, value }: { label: string; value: number | string }) {
+function Tile({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: LucideIcon; tone: string }) {
   return (
     <Card className="p-3">
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Icon size={13} className={tone} /> {label}
+      </div>
+      <div className="mt-1 text-2xl font-semibold leading-none tabular-nums">{value}</div>
     </Card>
   );
 }
@@ -18,9 +22,9 @@ export function AgentsStats() {
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-3 gap-2">
-        <Tile label="Replies today" value={data.repliesToday ?? 0} />
-        <Tile label="Replies total" value={data.repliesTotal ?? 0} />
-        <Tile label="Leads won" value={data.leadsByStatus?.won ?? 0} />
+        <Tile label="Replies today" value={data.repliesToday ?? 0} icon={MessageCircle} tone="text-primary" />
+        <Tile label="Replies total" value={data.repliesTotal ?? 0} icon={Zap} tone="text-accent" />
+        <Tile label="Leads won" value={data.leadsByStatus?.won ?? 0} icon={Trophy} tone="text-good" />
       </div>
       {perAgent.length > 1 && (
         <Card className="divide-y divide-border p-0">

@@ -17,7 +17,7 @@ export function registerRoutes(app: Express) {
   app.use('/api/auth', authRouter);
   app.use('/api/public', publicRouter);
   app.get('/api/me', authMiddleware, asyncHandler(async (req, res) =>
-    res.json({ email: (req as any).user.email, orgId: (req as any).user.orgId }),
+    res.json({ phone: (req as any).user.phone, orgId: (req as any).user.orgId, role: (req as any).user.role }),
   ));
   app.get('/api/templates', authMiddleware, (_req, res) =>
     res.json(TEMPLATES.map((t) => ({ id: t.id, label: t.label, emoji: t.emoji }))),
