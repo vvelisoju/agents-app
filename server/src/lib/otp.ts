@@ -27,6 +27,11 @@ export async function requestOtp(phone: string, purpose: OtpPurpose): Promise<{ 
   await prisma.phoneVerification.create({ data: { phone, codeHash, purpose, expiresAt: new Date(Date.now() + TTL_MIN * 60_000) } });
 
   const out = isSendConfigured() ? await sendOtp(phone, code) : { ok: false, error: 'not_configured' };
+  // Ops log so a failed/absent real send is visible (never logs the code; phone masked).
+  if (isSendConfigured()) {
+    const masked = '****' + phone.slice(-4);
+    console.log(`[otp] WhatsApp ${purpose} send to ${masked}: ${out.ok ? 'OK' : 'FAILED — ' + out.error}`);
+  }
   const dev = devEcho() ? { devOtp: code } : {};
   return out.ok ? { sent: true, ...dev } : { sent: false, reason: out.error || 'send_failed', ...dev };
 }
