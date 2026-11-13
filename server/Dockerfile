@@ -19,8 +19,8 @@ COPY . .
 # Production image runs on PostgreSQL (dev/tests stay SQLite).
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 RUN npx prisma generate
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 4000
-# Retry prisma db push until Postgres is ready (Railway starts DB and app simultaneously),
-# then boot the server.
-CMD sh -c "for i in 1 2 3 4 5; do npx prisma db push --skip-generate && break || (echo 'DB not ready, retrying in 5s...' && sleep 5); done && npx tsx src/index.ts"
+# Apply the schema (fail the deploy if it can't sync), then start the server.
+CMD ["sh", "docker-entrypoint.sh"]
