@@ -45,7 +45,7 @@ export function AgentDetail({ id }: { id: string }) {
   const snippet = `<script src="${WIDGET_BASE}/widget.js" data-agent="${id}"></script>`;
 
   return (
-    <div className="space-y-4">
+    <div className="max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/agents')} className="flex items-center gap-1 text-sm text-muted-foreground min-h-tap"><ArrowLeft size={16} /> Agents</button>
         <StatusPill status={agent.status} />

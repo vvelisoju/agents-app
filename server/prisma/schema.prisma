@@ -52,6 +52,7 @@ model Agent {
   hoursStart    Int?
   hoursEnd      Int?
   timezone      String           @default("Asia/Kolkata")
+  channelConfig String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
   createdAt     DateTime         @default(now())
   profile       TrainingProfile?
   sources       TrainingSource[]

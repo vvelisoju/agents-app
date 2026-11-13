@@ -1,9 +1,12 @@
 import * as React from 'react';
 import { Link, useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
-import { Wordmark } from '@/components/Brand';
+import { Wordmark, Brand } from '@/components/Brand';
+import { NotificationsDrawer } from './NotificationsDrawer';
+import { ProfileMenu } from './ProfileMenu';
 import { cn } from '@/lib/utils';
-import { Bot, Inbox, Users, Settings, Menu, X, Bell, LogOut, User } from 'lucide-react';
+import { Bot, Inbox, Users, Settings, Menu, Bell, User } from 'lucide-react';
 
 const NAV = [
   { path: '/agents', label: 'Agents', icon: Bot },
@@ -11,73 +14,83 @@ const NAV = [
   { path: '/leads', label: 'Leads', icon: Users },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
+const COLLAPSE_KEY = 'sa_sidebar_collapsed';
 
-// Standard app layout (ClassPe/clinIQ): fixed top header + left sidebar
-// (drawer on mobile) + bottom footer; content fills the main area, left-aligned.
+function Footer() {
+  const { account } = useAuth();
+  const { data } = useQuery<any>({ queryKey: ['/api/analytics'] });
+  return (
+    <footer className="hidden h-10 shrink-0 items-center justify-between gap-4 border-t border-border px-4 text-xs text-muted-foreground md:flex">
+      <span className="flex items-center gap-1.5"><Brand size={16} /> Secure Agents</span>
+      <span className="font-medium text-foreground/80">
+        {data
+          ? <>⚡ {data.agents ?? 0} agents · {data.repliesTotal ?? 0} replies · {data.leadsByStatus?.won ?? 0} leads won</>
+          : 'AI agents replying for your business, 24/7'}
+      </span>
+      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-good" /> {account} · active</span>
+    </footer>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { authed, account, logout } = useAuth();
+  const { authed } = useAuth();
   const [loc] = useLocation();
-  const [drawer, setDrawer] = React.useState(false);
-  React.useEffect(() => { setDrawer(false); }, [loc]);
+  const [collapsed, setCollapsed] = React.useState(() => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } });
+  const [notif, setNotif] = React.useState(false);
+  const [profile, setProfile] = React.useState(false);
   if (!authed) return <>{children}</>;
 
+  const toggleSidebar = () => setCollapsed((c) => { const n = !c; try { localStorage.setItem(COLLAPSE_KEY, n ? '1' : '0'); } catch {} return n; });
   const isActive = (p: string) => (p === '/agents' ? loc.startsWith('/agents') : loc === p || loc.startsWith(p + '/'));
-
-  const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
-    <nav className="space-y-1">
-      {NAV.map((n) => (
-        <Link key={n.path} href={n.path}>
-          <a onClick={onNavigate} className={cn('flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-            isActive(n.path) ? 'bg-primary/15 text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
-            <n.icon size={18} className={isActive(n.path) ? 'text-primary' : ''} /> {n.label}
-          </a>
-        </Link>
-      ))}
-    </nav>
-  );
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden">
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border glass px-3 md:px-4" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <button className="rounded-md p-2 text-muted-foreground hover:bg-muted md:hidden" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={20} /></button>
+        <button className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted md:block" onClick={toggleSidebar} aria-label="Toggle sidebar"><Menu size={20} /></button>
         <Wordmark size={28} />
         <div className="ml-auto flex items-center gap-1">
-          <button className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Notifications"><Bell size={18} /></button>
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-muted text-muted-foreground"><User size={16} /></span>
+          <button className="rounded-md p-2 text-muted-foreground hover:bg-muted" onClick={() => { setProfile(false); setNotif(true); }} aria-label="Notifications"><Bell size={18} /></button>
+          <button className="grid h-8 w-8 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-primary/20" onClick={() => { setNotif(false); setProfile((p) => !p); }} aria-label="Account"><User size={16} /></button>
         </div>
       </header>
 
-      {/* Body */}
+      {/* Body: desktop sidebar + content */}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border p-3 md:block">
-          <NavLinks />
+        <aside className={cn('hidden shrink-0 flex-col overflow-y-auto border-r border-border py-3 transition-[width] duration-200 md:flex', collapsed ? 'w-16 px-2' : 'w-60 px-3')}>
+          <nav className="space-y-1">
+            {NAV.map((n) => (
+              <Link key={n.path} href={n.path}>
+                <a title={n.label} className={cn('flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
+                  collapsed ? 'justify-center px-0' : 'px-3',
+                  isActive(n.path) ? 'bg-primary/15 text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
+                  <n.icon size={18} className={isActive(n.path) ? 'text-primary' : ''} />{!collapsed && n.label}
+                </a>
+              </Link>
+            ))}
+          </nav>
         </aside>
 
-        {/* Mobile drawer */}
-        {drawer && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setDrawer(false)} />
-            <aside className="absolute left-0 top-0 flex h-full w-72 flex-col glass border-r border-border p-3" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-              <div className="mb-4 flex items-center justify-between">
-                <Wordmark size={28} />
-                <button onClick={() => setDrawer(false)} className="p-1 text-muted-foreground" aria-label="Close menu"><X size={20} /></button>
-              </div>
-              <NavLinks onNavigate={() => setDrawer(false)} />
-            </aside>
-          </div>
-        )}
-
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="p-4 md:p-6">{children}</div>
+          <div className="p-4 pb-24 md:p-6 md:pb-6">{children}</div>
         </main>
       </div>
 
-      {/* Footer */}
-      <footer className="flex h-9 shrink-0 items-center justify-between border-t border-border px-4 text-xs text-muted-foreground" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <span className="truncate">{account} · Session active</span>
-        <button onClick={logout} className="flex shrink-0 items-center gap-1 hover:text-foreground"><LogOut size={13} /> Sign out</button>
-      </footer>
+      <Footer />
+
+      {/* Mobile native bottom tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border glass md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {NAV.map((n) => (
+          <Link key={n.path} href={n.path}>
+            <a className={cn('flex min-h-tap flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium', isActive(n.path) ? 'text-primary' : 'text-muted-foreground')}>
+              <n.icon size={20} /> {n.label}
+            </a>
+          </Link>
+        ))}
+      </nav>
+
+      <NotificationsDrawer open={notif} onClose={() => setNotif(false)} />
+      <ProfileMenu open={profile} onClose={() => setProfile(false)} />
     </div>
   );
 }

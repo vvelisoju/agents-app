@@ -9,6 +9,7 @@ import { AgentDetail } from '@/pages/AgentDetail';
 import { Inbox } from '@/pages/Inbox';
 import { Leads } from '@/pages/Leads';
 import { Settings } from '@/pages/Settings';
+import { Subscription } from '@/pages/Subscription';
 
 export function App() {
   const { authed, loading } = useAuth();
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/inbox" component={Inbox} />
         <Route path="/leads" component={Leads} />
         <Route path="/settings" component={Settings} />
+        <Route path="/subscription" component={Subscription} />
         <Route path="/"><Redirect to="/agents" /></Route>
         <Route><Redirect to="/agents" /></Route>
       </Switch>
