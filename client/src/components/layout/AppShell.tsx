@@ -44,7 +44,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isActive = (p: string) => (p === '/agents' ? loc.startsWith('/agents') : loc === p || loc.startsWith(p + '/'));
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden">
+    <div className="flex h-[100dvh] justify-center overflow-hidden">
+      {/* Fixed-width app frame — header, sidebar, content and footer all live inside it. */}
+      <div className="flex h-full w-full max-w-7xl flex-col overflow-hidden md:border-x md:border-border md:shadow-2xl md:shadow-black/30">
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border glass px-3 md:px-4" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <button className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted md:block" onClick={toggleSidebar} aria-label="Toggle sidebar"><Menu size={20} /></button>
@@ -72,11 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl p-4 pb-24 md:p-6 md:pb-6">{children}</div>
+          <div className="w-full p-4 pb-24 md:p-6 md:pb-6">{children}</div>
         </main>
       </div>
 
       <Footer />
+      </div>
 
       {/* Mobile native bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border glass md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>

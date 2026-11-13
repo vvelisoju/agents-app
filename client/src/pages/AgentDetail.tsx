@@ -3,6 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { apiRequest, queryClient } from '@/lib/api';
 import { useAgentEvents } from '@/lib/ws';
+import { cn } from '@/lib/utils';
+import { channelMeta } from '@/config/channels';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -61,14 +63,40 @@ export function AgentDetail({ id }: { id: string }) {
     </div>
   );
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex items-center justify-between">
-        <button onClick={() => navigate('/agents')} className="flex items-center gap-1 text-sm text-muted-foreground min-h-tap"><ArrowLeft size={16} /> Agents</button>
-        <StatusPill status={agent.status} />
-      </div>
-      <h1 className="text-xl font-semibold">{agent.name}</h1>
+  const m = channelMeta(agent.channelType);
+  const ChannelIcon = m.icon;
 
+  return (
+    <div className="space-y-5">
+      <button onClick={() => navigate('/agents')} className="flex items-center gap-1 text-sm text-muted-foreground min-h-tap"><ArrowLeft size={16} /> Agents</button>
+
+      {/* Agent hero — channel identity, status, and current mode at a glance. */}
+      <Card className="relative overflow-hidden p-5">
+        <div
+          className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, ${m.color}40, transparent 70%)` }}
+        />
+        <div className="relative flex items-center gap-4">
+          <span className={cn('grid h-14 w-14 shrink-0 place-items-center rounded-2xl', m.badge)}>
+            <ChannelIcon size={26} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-semibold tracking-tight">{agent.name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span>{m.label} agent</span>
+              <span className="text-border">•</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn('h-1.5 w-1.5 rounded-full', connected ? 'bg-good' : 'bg-muted-foreground/50')} />
+                {agent.autoSend ? 'Auto-reply on' : 'Approve before sending'}
+              </span>
+            </div>
+          </div>
+          <div className="shrink-0 self-start"><StatusPill status={agent.status} /></div>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:items-start">
+      <div className="space-y-4 lg:sticky lg:top-4">
       <Card className="space-y-4 p-4">
         {connected ? (
           <>
@@ -137,15 +165,19 @@ export function AgentDetail({ id }: { id: string }) {
       </Card>
 
       <AvailabilityCard id={id} agent={agent} />
+      </div>
 
-      <Tabs
-        tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }]}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === 'train' && <TrainingPanel id={id} />}
-      {tab === 'test' && <TestPanel id={id} />}
-      {tab === 'chats' && <ChatsPanel id={id} />}
+      <div className="space-y-4">
+        <Tabs
+          tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }]}
+          value={tab}
+          onChange={setTab}
+        />
+        {tab === 'train' && <TrainingPanel id={id} />}
+        {tab === 'test' && <TestPanel id={id} />}
+        {tab === 'chats' && <ChatsPanel id={id} />}
+      </div>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ export type ChannelMeta = {
   ready: boolean;
   badge: string; // icon chip: tint background + text color
   selected: string; // picker card when chosen: border + fill
+  color: string; // raw accent hex — for glows/gradients via inline style
 };
 
 export const CHANNELS: ChannelMeta[] = [
@@ -19,30 +20,35 @@ export const CHANNELS: ChannelMeta[] = [
     blurb: 'Reply to WhatsApp customers', ready: true,
     badge: 'bg-emerald-500/15 text-emerald-400',
     selected: 'border-emerald-500/60 bg-emerald-500/10',
+    color: '#10b981',
   },
   {
     type: 'website', label: 'Website', icon: Globe,
     blurb: 'A chat widget on your site', ready: true,
     badge: 'bg-violet-500/15 text-violet-400',
     selected: 'border-violet-500/60 bg-violet-500/10',
+    color: '#8b5cf6',
   },
   {
     type: 'telegram', label: 'Telegram', icon: Send,
     blurb: 'A Telegram bot', ready: true,
     badge: 'bg-sky-500/15 text-sky-400',
     selected: 'border-sky-500/60 bg-sky-500/10',
+    color: '#0ea5e9',
   },
   {
     type: 'instagram', label: 'Instagram', icon: Instagram,
     blurb: 'Answer Instagram DMs', ready: false,
     badge: 'bg-pink-500/15 text-pink-400',
     selected: 'border-pink-500/60 bg-pink-500/10',
+    color: '#ec4899',
   },
   {
     type: 'gmail', label: 'Email', icon: Mail,
     blurb: 'Auto-reply to enquiries', ready: false,
     badge: 'bg-amber-500/15 text-amber-400',
     selected: 'border-amber-500/60 bg-amber-500/10',
+    color: '#f59e0b',
   },
 ];
 

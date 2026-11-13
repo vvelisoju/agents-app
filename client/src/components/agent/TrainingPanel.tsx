@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Trash2, Plus } from 'lucide-react';
+import { Sparkles, Trash2, Plus, X } from 'lucide-react';
 
 // The heart: train-from-link (no typing) + optional manual enrichment.
 export function TrainingPanel({ id }: { id: string }) {
@@ -24,7 +24,9 @@ export function TrainingPanel({ id }: { id: string }) {
   });
 
   const [url, setUrl] = React.useState('');
-  const [draft, setDraft] = React.useState<any>(null);
+  // The reviewable draft: a local, editable copy of what the agent read, so the
+  // owner can drop a wrong fact/FAQ or tweak the instructions BEFORE it goes live.
+  const [review, setReview] = React.useState<any>(null);
   const [instructions, setInstructions] = React.useState('');
   const [restrictions, setRestrictions] = React.useState('');
   React.useEffect(() => {
@@ -33,13 +35,24 @@ export function TrainingPanel({ id }: { id: string }) {
 
   const learn = useMutation({
     mutationFn: () => apiRequest('POST', `/api/agents/${id}/training/learn`, { url }),
-    onSuccess: (r: any) => setDraft(r),
+    onSuccess: (r: any) => {
+      const s = r?.suggestion || {};
+      setReview({
+        summary: s.summary || '',
+        instructions: s.instructions || '',
+        tone: s.tone,
+        language: s.language,
+        facts: [...(s.facts || [])],
+        faqs: [...(s.faqs || [])],
+        links: [...(s.links || [])],
+      });
+    },
     onError: (e: any) => toast(e.message || 'Could not read that link', 'warn'),
   });
 
   const applyDraft = useMutation({
     mutationFn: async () => {
-      const s = draft.suggestion;
+      const s = review;
       await apiRequest('PUT', `/api/agents/${id}/training/profile`, {
         instructions: s.instructions, tone: s.tone, language: s.language, restrictions: data?.profile?.restrictions || '',
       });
@@ -47,9 +60,13 @@ export function TrainingPanel({ id }: { id: string }) {
       for (const q of s.faqs) await apiRequest('POST', `/api/agents/${id}/training/sources`, { type: 'faq', data: q });
       for (const l of s.links) await apiRequest('POST', `/api/agents/${id}/training/sources`, { type: 'link', data: l });
     },
-    onSuccess: () => { setDraft(null); setUrl(''); invalidate(); toast('Added to your agent — it already knows this', 'good'); },
+    onSuccess: () => { setReview(null); setUrl(''); invalidate(); toast('Added to your agent — it already knows this', 'good'); },
     onError: (e: any) => toast(e.message || 'Could not save', 'destructive'),
   });
+
+  const upd = (patch: any) => setReview((r: any) => ({ ...r, ...patch }));
+  const dropAt = (keyName: 'facts' | 'faqs' | 'links', idx: number) =>
+    setReview((r: any) => ({ ...r, [keyName]: r[keyName].filter((_: any, j: number) => j !== idx) }));
 
   const saveProfile = useMutation({
     mutationFn: () => apiRequest('PUT', `/api/agents/${id}/training/profile`, { instructions, restrictions, tone: data?.profile?.tone, language: data?.profile?.language }),
@@ -85,19 +102,65 @@ export function TrainingPanel({ id }: { id: string }) {
           <Button className="shrink-0 whitespace-nowrap" disabled={!url || learn.isPending} onClick={() => learn.mutate()}>{learn.isPending ? 'Reading…' : 'Read & set up'}</Button>
         </div>
 
-        {draft && (
-          <div className="space-y-2 rounded-lg border border-border p-3">
-            <p className="text-sm font-medium">{draft.suggestion.summary || 'Here’s what I found'}</p>
-            {draft.suggestion.instructions && <p className="text-xs text-muted-foreground">{draft.suggestion.instructions}</p>}
-            <div className="flex flex-wrap gap-1.5">
-              {draft.suggestion.facts.map((f: string, i: number) => <Badge key={i}>{f}</Badge>)}
-              {draft.suggestion.links.map((l: any, i: number) => <Badge key={'l' + i} variant="primary">{l.name}</Badge>)}
-              {draft.suggestion.faqs.map((_: any, i: number) => <Badge key={'q' + i}>FAQ</Badge>)}
+        {review && (
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            {review.summary && <p className="text-sm font-medium">{review.summary}</p>}
+
+            <div>
+              <Label className="text-xs text-muted-foreground">How it should reply</Label>
+              <Textarea rows={3} value={review.instructions} onChange={(e) => upd({ instructions: e.target.value })} placeholder="How the agent should greet and help customers" />
             </div>
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" disabled={applyDraft.isPending} onClick={() => applyDraft.mutate()}>Add these to the agent</Button>
-              <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Discard</Button>
+
+            {review.facts.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Facts &amp; prices ({review.facts.length})</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {review.facts.map((f: string, i: number) => (
+                    <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs">
+                      <span className="truncate">{f}</span>
+                      <button aria-label="Remove fact" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => dropAt('facts', i)}><X size={12} /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {review.faqs.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Questions it can answer ({review.faqs.length})</Label>
+                <div className="space-y-1.5">
+                  {review.faqs.map((q: any, i: number) => (
+                    <div key={i} className="flex items-start justify-between gap-2 rounded-md border border-border bg-muted/30 p-2 text-xs">
+                      <span className="min-w-0">
+                        <span className="font-medium">{q.question}</span>
+                        {q.answer && <span className="mt-0.5 block text-muted-foreground">{q.answer}</span>}
+                      </span>
+                      <button aria-label="Remove question" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => dropAt('faqs', i)}><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {review.links.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Links</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {review.links.map((l: any, i: number) => (
+                    <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary">
+                      <span className="truncate">{l.name}</span>
+                      <button aria-label="Remove link" className="shrink-0 hover:text-destructive" onClick={() => dropAt('links', i)}><X size={12} /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button size="sm" disabled={applyDraft.isPending} onClick={() => applyDraft.mutate()}>{applyDraft.isPending ? 'Adding…' : 'Add these to the agent'}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setReview(null)}>Discard</Button>
             </div>
+            <p className="text-[11px] text-muted-foreground">Remove anything that's off and tweak the instructions before adding — you can edit all of it later too.</p>
           </div>
         )}
 
@@ -106,7 +169,14 @@ export function TrainingPanel({ id }: { id: string }) {
           <p className="mb-2 text-sm text-muted-foreground">No link handy? Pick your business type instead:</p>
           <div className="flex flex-wrap gap-2">
             {templates.map((t) => (
-              <button key={t.id} onClick={() => applyTemplate.mutate(t.id)} disabled={applyTemplate.isPending}
+              <button key={t.id} onClick={() => {
+                // Business-type setup is a STARTER for a blank agent — never wipe
+                // instructions the owner already saved. Replace only when empty;
+                // if they exist, confirm so an intentional switch is still possible.
+                const hasInstr = !!((instructions || '').trim() || (data?.profile?.instructions || '').trim());
+                if (hasInstr && !window.confirm(`You already have saved instructions. Replace them with the standard "${t.label}" setup?`)) return;
+                applyTemplate.mutate(t.id);
+              }} disabled={applyTemplate.isPending}
                 className="rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary disabled:opacity-50">
                 {t.emoji} {t.label}
               </button>
