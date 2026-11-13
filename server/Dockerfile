@@ -1,6 +1,5 @@
-# Server image. Bundles Chromium for the whatsapp-web.js channel (not needed if you
-# only use the WhatsApp Cloud API later). For PostgreSQL, change the datasource
-# provider in prisma/schema.prisma to "postgresql" and set DATABASE_URL accordingly.
+# Server image. Bundles Chromium for whatsapp-web.js.
+# Prisma provider is "postgresql" — set DATABASE_URL to a postgres connection string.
 FROM node:20-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,5 +18,6 @@ COPY . .
 RUN npx prisma generate
 
 EXPOSE 4000
-# Sync schema, then boot. (Swap db push for `prisma migrate deploy` once you add migrations.)
-CMD sh -c "npx prisma db push --skip-generate && npx tsx src/index.ts"
+# Retry prisma db push until Postgres is ready (Railway starts DB and app simultaneously),
+# then boot the server.
+CMD sh -c "for i in 1 2 3 4 5; do npx prisma db push --skip-generate && break || (echo 'DB not ready, retrying in 5s...' && sleep 5); done && npx tsx src/index.ts"

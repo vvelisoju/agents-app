@@ -103,6 +103,29 @@ describe('API integration', () => {
     expect(r.body.name).toBe('Acme Co');
   });
 
+  it('validation: signup rejects a bad email and a short password (400)', async () => {
+    expect((await request(app).post('/api/auth/signup').send({ email: 'not-an-email', password: 'secret123' })).status).toBe(400);
+    expect((await request(app).post('/api/auth/signup').send({ email: email(), password: '123' })).status).toBe(400);
+  });
+
+  it('password reset: forgot issues a code; reset with it changes the password', async () => {
+    const em = email();
+    await request(app).post('/api/auth/signup').send({ email: em, password: 'secret123' });
+    const forgot = await request(app).post('/api/auth/forgot').send({ email: em });
+    expect(forgot.status).toBe(200);
+    const otp = forgot.body.devOtp;
+    expect(otp).toBeTruthy();
+    // wrong code is rejected
+    expect((await request(app).post('/api/auth/reset').send({ email: em, otp: '000000', password: 'newpass123' })).status).toBe(400);
+    // correct code works and returns a fresh token
+    const reset = await request(app).post('/api/auth/reset').send({ email: em, otp, password: 'newpass123' });
+    expect(reset.status).toBe(200);
+    expect(reset.body.token).toBeTruthy();
+    // new password works, old one doesn't
+    expect((await request(app).post('/api/auth/login').send({ email: em, password: 'newpass123' })).status).toBe(200);
+    expect((await request(app).post('/api/auth/login').send({ email: em, password: 'secret123' })).status).toBe(401);
+  });
+
   it('analytics returns org-scoped counts', async () => {
     const t = await signup();
     await request(app).post('/api/agents').set(auth(t)).send({ name: 'A', channelType: 'website' });

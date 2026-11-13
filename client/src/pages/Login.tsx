@@ -26,17 +26,20 @@ export function Login() {
 
   return (
     <AuthLayout title={<>Welcome back</>} subtitle="Log in to your AI agents.">
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
           <Label>Mobile number</Label>
           <MobileInput value={mobile} onChange={setMobile} onEnter={go} />
         </div>
         <div>
-          <Label>Password</Label>
+          <div className="mb-1 flex items-center justify-between">
+            <Label className="mb-0">Password</Label>
+            <Link href="/forgot"><a className="text-xs font-medium text-primary">Forgot password?</a></Link>
+          </div>
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" onKeyDown={(e) => e.key === 'Enter' && go()} />
         </div>
         <Button className="w-full" disabled={busy} onClick={go}>Log in</Button>
-        <p className="pt-1 text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-muted-foreground">
           New here? <Link href="/signup"><a className="font-medium text-primary">Create an account</a></Link>
         </p>
       </div>

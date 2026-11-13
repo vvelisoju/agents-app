@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.production
+*.db
+*.db-journal
+dev.db*
+prod.db*
+.wwebjs_auth
+.wwebjs_cache
+dist
+*.log
+tests

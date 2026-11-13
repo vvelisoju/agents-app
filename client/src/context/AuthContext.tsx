@@ -9,6 +9,7 @@ interface AuthState {
   authed: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
+  setSession: (token: string, email: string) => void;
   logout: () => void;
 }
 
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authed: !!email,
     login: (e, p) => auth('/api/auth/login', e, p),
     signup: (e, p) => auth('/api/auth/signup', e, p),
+    setSession: (t, e) => { setToken(t); setEmail(e); },
     logout: () => { setToken(''); setEmail(null); },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

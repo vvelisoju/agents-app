@@ -9,7 +9,7 @@ export interface InboundMessage {
 
 export interface ChannelAdapter {
   type: string;                                   // 'whatsapp-web' | 'website' | …
-  onboarding: 'qr' | 'embed' | 'oauth' | 'none';
+  onboarding: 'qr' | 'embed' | 'oauth' | 'token' | 'none';
   // Optional lifecycle (WhatsApp needs it; a website widget does not).
   start?(agentId: string): Promise<void>;
   stop?(agentId: string): Promise<void>;

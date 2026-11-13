@@ -83,10 +83,19 @@ today/total, leads by status). Test suite now **21 green** (unit + integration i
 billing, team). Client teammate shipped the Inbox with takeover/mute/reply, PWA, and visual identity
 against this API. Server typecheck clean; no regression.
 
-Pending (backend): Instagram/Gmail/Telegram adapter scaffolds (flagged for OAuth keys/bot token),
-Razorpay webhook + signature verify (needs keys), RAG for large link knowledge (B6.3, needs Postgres),
-Redis queue (B6.2, needs Redis). The core product backend (2 channels, training, control, leads,
-billing-dev, analytics, auth, team) is complete and tested.
+**2026-11-13 (5) — hardening + Telegram + password reset.** Added **Zod validation** on all write
+endpoints (400 + machine-readable issues), a tighter **/api/auth rate limit**, and a **secure password
+reset** (server-verified one-time code: POST /auth/forgot → POST /auth/reset; dev exposes the code, prod
+delivers via SMS/WhatsApp/email later). Built the **Telegram channel** adapter (long-polling, per-agent
+bot token in `channelConfig`, normalize unit-tested) — a free BotFather token makes it live. Test suite
+now **25 green**. The client session also contributed a client Dockerfile + nginx compose. Delivered
+toward: B13.3, B9.6, B2.1 (reset).
+
+Pending (backend): Instagram/Gmail OAuth adapters (need Meta/Google apps — user holding off on Instagram),
+Razorpay webhook + signature verify (needs keys), RAG for large link knowledge (needs Postgres+pgvector),
+Redis queue (needs Redis), real OTP delivery (needs an SMS/WhatsApp/email provider). The core product
+backend (3 channel types, training, control, leads, billing-dev, analytics, auth+reset, team, validation)
+is complete and tested — remaining items are all external-account-gated.
 
 ---
 
@@ -174,7 +183,7 @@ billing-dev, analytics, auth, team) is complete and tested.
 - ⬜ **T9.3** Missed-call → WhatsApp (telephony: Exotel/Knowlarity). *AC: a missed call triggers a WhatsApp reply.*
 - ⬜ **T9.4** Google Business — reviews + profile Q&A. *AC: auto-answer a profile question.*
 - ⬜ **T9.5** Facebook Messenger (Meta). *AC: Messenger reply.*
-- ⬜ **T9.6** Telegram (bot token). *AC: bot reply.*
+- 🔨 **T9.6** Telegram adapter built (long-polling, bot token in `channelConfig`, normalize unit-tested) — needs a BotFather token + a gallery tile to go live.
 - ⬜ **T9.7** Gmail / Email (OAuth / IMAP-SMTP). *AC: email auto-reply.*
 - ⬜ **T9.8** SMS (Twilio/Gupshup). *AC: SMS reply.*
 - ⬜ **T9.9** Voice / IVR agent (later). *AC: answered-call demo in local language.*
@@ -202,7 +211,7 @@ billing-dev, analytics, auth, team) is complete and tested.
 ## B13 — Security & compliance
 - ⬜ **T13.1** Server-authoritative authZ on every route (codes, not prose). *AC: authZ audit passes.*
 - ⬜ **T13.2** Encrypt channel credentials/sessions at rest. *AC: no plaintext tokens.*
-- ⬜ **T13.3** Rate limiting + Zod validation + helmet + CORS. *AC: configured + tested.*
+- ✅ **T13.3** helmet + CORS + rate limiting (general + tighter on /api/auth) + **Zod validation on every write endpoint** (400 with machine-readable issues) + JSON 404s. Tested.
 - ⬜ **T13.4** Channel ToS safety (WhatsApp reply-only + volume caps) + Meta/Google app-review compliance. *AC: documented + enforced.*
 - ⬜ **T13.5** Data privacy: tenant isolation, data export + deletion. *AC: export/delete work.*
 - ⬜ **T13.6** Security review (repo `/security-review`). *AC: no high-severity findings.*

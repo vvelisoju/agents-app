@@ -3,6 +3,8 @@
 import { Router } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { validate } from '../../middleware/validate';
+import { addMemberSchema } from '../../lib/schemas';
 import { hashPassword, newToken } from '../../middleware/auth';
 
 const router = Router();
@@ -17,10 +19,9 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(members);
 }));
 
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', validate(addMemberSchema), asyncHandler(async (req, res) => {
   if (u(req).role !== 'owner') return res.status(403).json({ error: 'only the owner can add members', code: 'forbidden' });
-  const { email, password, role } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  const { email, password, role } = req.body;
   if (await prisma.user.findUnique({ where: { email } })) return res.status(409).json({ error: 'email already registered' });
   const m = await prisma.user.create({
     data: { orgId: u(req).orgId, email, passwordHash: await hashPassword(password), token: newToken(), role: role === 'owner' ? 'owner' : 'member' },

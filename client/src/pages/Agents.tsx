@@ -8,12 +8,13 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/StatusPill';
 import { AgentsStats } from '@/components/AgentsStats';
-import { MessageCircle, Instagram, Mail, Globe, Plus, ChevronRight } from 'lucide-react';
+import { MessageCircle, Instagram, Mail, Globe, Send, Plus, ChevronRight } from 'lucide-react';
 
 // The agent gallery — extensible from the channel registry (AGENTS.md).
 const CHANNELS = [
   { type: 'whatsapp-web', label: 'WhatsApp', icon: MessageCircle, blurb: 'Reply to WhatsApp customers', ready: true },
   { type: 'website', label: 'Website', icon: Globe, blurb: 'A chat widget on your site', ready: true },
+  { type: 'telegram', label: 'Telegram', icon: Send, blurb: 'A Telegram bot', ready: true },
   { type: 'instagram', label: 'Instagram', icon: Instagram, blurb: 'Answer Instagram DMs', ready: false },
   { type: 'gmail', label: 'Email', icon: Mail, blurb: 'Auto-reply to enquiries', ready: false },
 ];

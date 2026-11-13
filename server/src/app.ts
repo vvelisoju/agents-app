@@ -7,7 +7,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { registerRoutes } from './routes';
-import './channels/website'; // register the (lightweight) website adapter
+import './channels/website';  // register the website adapter
+import './channels/telegram'; // register the telegram adapter
 
 export function buildApp() {
   const app = express();
@@ -16,6 +17,9 @@ export function buildApp() {
   app.use(cors({ origin: origins.length ? origins : true, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
   app.use('/api', rateLimit({ windowMs: 60_000, max: 600, standardHeaders: true, legacyHeaders: false }));
+  // Tighter limit on auth to slow brute force (relaxed under test).
+  const authMax = process.env.NODE_ENV === 'test' ? 1000 : 20;
+  app.use('/api/auth', rateLimit({ windowMs: 60_000, max: authMax, standardHeaders: true, legacyHeaders: false }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   registerRoutes(app);

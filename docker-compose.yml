@@ -1,32 +1,58 @@
-# Local/prod-like stack for the multi-agent SaaS backend.
-# The client (client/) deploys separately as a static PWA (Vercel/Netlify) pointed at
-# the server's public URL via VITE_API_URL.
+# Full stack: Postgres + Redis + Express API (server/) + React SPA (client/).
 #
-# Run:  docker compose up --build
-# Postgres: to use it, set DATABASE_URL below AND change the provider in
-#   server/prisma/schema.prisma to "postgresql" (SQLite is the zero-setup default).
+# Quick start:
+#   cp server/.env.production.example server/.env.production
+#   # fill in ANTHROPIC_API_KEY and CORS_ORIGIN in server/.env.production
+#   docker compose up --build
+#
+# The client is served by nginx on port 80; it proxies /api and /ws to the server.
+# The server is NOT exposed to the internet (port 4001 is for LAN/debug only).
+# For HTTPS, put Caddy or nginx in front of port 80.
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: agents
       POSTGRES_DB: agents
     volumes: [pgdata:/var/lib/postgresql/data]
-    ports: ['5432:5432']
+    # Only expose locally — not needed outside this compose network.
+    expose: ['5432']
 
   redis:
     image: redis:7-alpine
-    ports: ['6379:6379']
+    restart: unless-stopped
+    expose: ['6379']
 
   server:
     build: ./server
+    restart: unless-stopped
     env_file: ./server/.env.production
     environment:
       PORT: '4000'
-      # For Postgres, uncomment (and switch the prisma provider):
+      # Uncomment + switch prisma/schema.prisma provider to "postgresql" to use Postgres.
       # DATABASE_URL: 'postgresql://postgres:agents@postgres:5432/agents'
-    ports: ['4001:4000']
+    # Expose 4001 only for local debugging; nginx proxies /api internally.
+    ports: ['127.0.0.1:4001:4000']
     depends_on: [postgres, redis]
+    volumes:
+      # Persist WhatsApp sessions across redeploys so agents stay connected.
+      - wa_auth:/app/.wwebjs_auth
+      - wa_cache:/app/.wwebjs_cache
+
+  client:
+    build:
+      context: ./client
+      # Pass a URL only for split deploy (CDN + separate API host). Leave empty
+      # when nginx proxies /api to the server container on the same host.
+      args:
+        VITE_API_URL: ''
+    restart: unless-stopped
+    ports: ['80:80']
+    depends_on: [server]
 
 volumes:
   pgdata:
+  wa_auth:
+  wa_cache:

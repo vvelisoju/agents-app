@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Brand } from '@/components/Brand';
 import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
+import { Forgot } from '@/pages/Forgot';
 import { Agents } from '@/pages/Agents';
 import { AgentDetail } from '@/pages/AgentDetail';
 import { Inbox } from '@/pages/Inbox';
@@ -22,6 +23,7 @@ export function App() {
     return (
       <Switch>
         <Route path="/signup" component={Signup} />
+        <Route path="/forgot" component={Forgot} />
         <Route component={Login} />
       </Switch>
     );

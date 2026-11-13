@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { composeSystemPrompt, applyLinks, trainingSummary, Source } from '../src/lib/training';
 import { TEMPLATES, getTemplate } from '../src/lib/templates';
 import { normaliseUrl, extractReadable } from '../src/lib/learn';
+import { normalizeUpdate } from '../src/channels/telegram';
 
 const agent = { name: 'Secure Studio' };
 const profile = {
@@ -60,6 +61,18 @@ describe('templates', () => {
     expect(TEMPLATES.length).toBe(7);
     expect(getTemplate('coworking')?.instructions).toMatch(/coworking/i);
     expect(getTemplate('does-not-exist')).toBeUndefined();
+  });
+});
+
+describe('telegram normalizeUpdate', () => {
+  it('normalizes a text message to the common InboundMessage', () => {
+    const r = normalizeUpdate({ update_id: 1, message: { chat: { id: 123 }, from: { first_name: 'Asha', last_name: 'K' }, text: 'hi' } });
+    expect(r).toEqual({ from: 'tg:123', contactName: 'Asha K', text: 'hi' });
+  });
+  it('ignores non-text or malformed updates', () => {
+    expect(normalizeUpdate({ message: { chat: { id: 1 }, photo: [] } })).toBeNull();
+    expect(normalizeUpdate({})).toBeNull();
+    expect(normalizeUpdate(null)).toBeNull();
   });
 });
 

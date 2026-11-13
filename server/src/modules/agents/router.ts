@@ -8,6 +8,8 @@ import { draftFor } from '../../engine/engine';
 import { learnFromUrl } from '../../lib/learn';
 import { trainingSummary, Source } from '../../lib/training';
 import { getTemplate } from '../../lib/templates';
+import { validate } from '../../middleware/validate';
+import { createAgentSchema, sourceSchema } from '../../lib/schemas';
 
 const router = Router();
 
@@ -17,10 +19,9 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(agents);
 }));
 
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', validate(createAgentSchema), asyncHandler(async (req, res) => {
   const orgId = (req as any).user.orgId;
-  const name = String(req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'name required' });
+  const name = req.body.name;
   const sub = await prisma.subscription.findUnique({ where: { orgId } });
   const count = await prisma.agent.count({ where: { orgId } });
   if (sub && count >= sub.maxAgents) {
@@ -54,6 +55,7 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   if (req.body?.hoursStart === null || typeof req.body?.hoursStart === 'number') data.hoursStart = req.body.hoursStart;
   if (req.body?.hoursEnd === null || typeof req.body?.hoursEnd === 'number') data.hoursEnd = req.body.hoursEnd;
   if (typeof req.body?.timezone === 'string') data.timezone = req.body.timezone;
+  if (req.body?.channelConfig && typeof req.body.channelConfig === 'object') data.channelConfig = JSON.stringify(req.body.channelConfig);
   const updated = await prisma.agent.update({ where: { id: agent(req).id }, data });
   res.json(updated);
 }));
@@ -130,9 +132,8 @@ scoped.post('/training/learn', asyncHandler(async (req, res) => {
   }
 }));
 
-scoped.post('/training/sources', asyncHandler(async (req, res) => {
-  const { type, data } = req.body || {};
-  if (!['fact', 'link', 'faq'].includes(type)) return res.status(400).json({ error: 'bad source type' });
+scoped.post('/training/sources', validate(sourceSchema), asyncHandler(async (req, res) => {
+  const { type, data } = req.body;
   const row = await prisma.trainingSource.create({ data: { agentId: agent(req).id, type, dataJson: JSON.stringify(data || {}) } });
   res.json({ id: row.id });
 }));
