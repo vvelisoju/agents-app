@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Clock } from 'lucide-react';
 
 const hourLabel = (h: number) => `${(h % 12) || 12}${h < 12 ? 'am' : 'pm'}`;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -20,36 +21,47 @@ export function AvailabilityCard({ id, agent }: { id: string; agent: any }) {
   const [away, setAway] = React.useState<string>(agent.awayMessage ?? '');
 
   const save = useMutation({
-    mutationFn: () => apiRequest('PATCH', `/api/agents/${id}`, limited
-      ? { hoursStart: start, hoursEnd: end, awayMessage: away.trim() || null }
-      : { hoursStart: null, hoursEnd: null, awayMessage: null }),
+    mutationFn: (v: { limited: boolean; start: number; end: number; away: string }) =>
+      apiRequest('PATCH', `/api/agents/${id}`, v.limited
+        ? { hoursStart: v.start, hoursEnd: v.end, awayMessage: v.away.trim() || null }
+        : { hoursStart: null, hoursEnd: null, awayMessage: null }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: key }); toast('Availability saved', 'good'); },
     onError: (e: any) => toast(e.message || 'Could not save', 'warn'),
   });
 
-  const sel = 'rounded-md border border-input bg-background/60 px-2 py-1.5 text-sm';
+  // Turning business hours OFF means "reply 24/7" — apply instantly, no button needed.
+  const onToggle = (v: boolean) => {
+    setLimited(v);
+    if (!v) save.mutate({ limited: false, start, end, away });
+  };
+
+  const sel = 'rounded-md border border-input bg-background/60 px-2 py-1.5 text-sm min-h-tap';
 
   return (
     <Card className="space-y-3 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium">Availability</div>
-          <div className="text-xs text-muted-foreground">{limited ? `Replies ${hourLabel(start)}–${hourLabel(end)}` : 'Replies 24/7'}</div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Clock size={18} className="text-muted-foreground" />
+          <div>
+            <div className="font-medium">Availability</div>
+            <div className="text-xs text-muted-foreground">{limited ? `Replies ${hourLabel(start)}–${hourLabel(end)}` : 'Replies any time · 24/7'}</div>
+          </div>
         </div>
-        <Switch checked={limited} onCheckedChange={setLimited} label="business hours" />
+        <Switch checked={limited} onCheckedChange={onToggle} label="business hours" />
       </div>
+
       {limited && (
-        <>
-          <div className="flex items-center gap-2 text-sm">
+        <div className="space-y-3 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">From</span>
             <select className={sel} value={start} onChange={(e) => setStart(Number(e.target.value))}>{HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select>
             <span className="text-muted-foreground">to</span>
             <select className={sel} value={end} onChange={(e) => setEnd(Number(e.target.value))}>{HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select>
+            <Button size="sm" className="ml-auto" disabled={save.isPending} onClick={() => save.mutate({ limited: true, start, end, away })}>Save</Button>
           </div>
           <Textarea value={away} onChange={(e) => setAway(e.target.value)} placeholder="After-hours reply, e.g. We're closed now — we'll get back to you in the morning." />
-        </>
+        </div>
       )}
-      <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>Save availability</Button>
     </Card>
   );
 }

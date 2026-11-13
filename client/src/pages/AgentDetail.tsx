@@ -14,7 +14,7 @@ import { ChatsPanel } from '@/components/agent/ChatsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
-import { ArrowLeft, QrCode, Globe, Send } from 'lucide-react';
+import { ArrowLeft, QrCode, Globe, Send, Copy } from 'lucide-react';
 
 const WIDGET_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4001';
 
@@ -51,55 +51,88 @@ export function AgentDetail({ id }: { id: string }) {
     catch (e: any) { toast(e.message || 'Could not save the bot token', 'warn'); }
   };
 
+  const copySnippet = () => { navigator.clipboard?.writeText(snippet); toast('Snippet copied', 'good'); };
+
+  const SnippetBlock = () => (
+    <div className="rounded-lg border border-border p-3">
+      <p className="mb-2 text-sm text-muted-foreground">Add this one line just before <code>&lt;/body&gt;</code> on your website:</p>
+      <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs">{snippet}</pre>
+      <Button size="sm" variant="ghost" className="mt-2" onClick={copySnippet}><Copy size={14} /> Copy snippet</Button>
+    </div>
+  );
+
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/agents')} className="flex items-center gap-1 text-sm text-muted-foreground min-h-tap"><ArrowLeft size={16} /> Agents</button>
         <StatusPill status={agent.status} />
       </div>
       <h1 className="text-xl font-semibold">{agent.name}</h1>
 
-      <Card className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {connected ? (
-            <Button variant="ghost" onClick={() => disconnect.mutate()}>{isWebsite ? 'Turn off' : 'Disconnect'}</Button>
-          ) : isWebsite ? (
-            <Button onClick={() => connect.mutate()} disabled={connect.isPending}><Globe size={16} /> Turn on widget</Button>
-          ) : isTelegram ? (
-            <Button onClick={connectTelegram} disabled={!botToken.trim() || connect.isPending}><Send size={16} /> Connect bot</Button>
-          ) : (
-            <Button onClick={() => connect.mutate()} disabled={connect.isPending}><QrCode size={16} /> Connect / show QR</Button>
-          )}
-          <label className="ml-auto flex items-center gap-2 text-sm">
-            <Switch checked={!!agent.autoSend} onCheckedChange={(v) => toggle.mutate(v)} label="auto-reply" />
-            Auto-reply
-          </label>
-        </div>
+      <Card className="space-y-4 p-4">
+        {connected ? (
+          <>
+            {/* Live status header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-good opacity-60" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-good" />
+                </span>
+                <div>
+                  <div className="font-medium text-good">{isWebsite ? 'Widget is live' : 'Connected'}</div>
+                  <div className="text-xs text-muted-foreground">{agent.autoSend ? 'Replies send automatically.' : 'Drafts wait for your approval.'}</div>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>{isWebsite ? 'Turn off' : 'Disconnect'}</Button>
+            </div>
 
-        {!connected && isTelegram && (
-          <div className="rounded-lg border border-border p-3">
-            <p className="mb-2 text-sm text-muted-foreground">Create a bot with <b>@BotFather</b> on Telegram, then paste its token:</p>
-            <Input value={botToken} onChange={(e) => setBotToken(e.target.value)} placeholder="123456:ABC-DEF…" />
-          </div>
-        )}
+            {/* Auto-reply control — state stated in words */}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
+              <div>
+                <div className="text-sm font-medium">Auto-reply</div>
+                <div className="text-xs text-muted-foreground">{agent.autoSend ? 'On — the agent replies on its own.' : 'Off — you approve each draft first.'}</div>
+              </div>
+              <Switch checked={!!agent.autoSend} onCheckedChange={(v) => toggle.mutate(v)} label="auto-reply" />
+            </div>
 
-        {!connected && !isWebsite && !isTelegram && qr && (
-          <div className="rounded-lg border border-border p-4 text-center">
-            <p className="mb-2 text-sm text-muted-foreground">Open WhatsApp → Linked Devices → Link a device, then scan:</p>
-            <img src={qr} alt="QR code" className="mx-auto h-56 w-56 rounded bg-white p-2" />
-          </div>
-        )}
+            {isWebsite && <SnippetBlock />}
+          </>
+        ) : (
+          <>
+            {/* Not connected — one clear step to go live */}
+            <div>
+              <div className="font-medium">{isWebsite ? 'Turn on your website widget' : isTelegram ? 'Connect your Telegram bot' : 'Connect WhatsApp'}</div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {isWebsite ? 'Switch it on, then paste one line into your site.'
+                  : isTelegram ? 'Create a bot with @BotFather, paste its token, and connect.'
+                  : 'Scan a QR code with WhatsApp on your phone — about 20 seconds.'}
+              </p>
+            </div>
 
-        {isWebsite && (
-          <div className="rounded-lg border border-border p-3">
-            <p className="mb-2 text-sm text-muted-foreground">Paste this just before <code>&lt;/body&gt;</code> on your website:</p>
-            <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs">{snippet}</pre>
-            <Button size="sm" variant="ghost" className="mt-2" onClick={() => { navigator.clipboard?.writeText(snippet); toast('Snippet copied', 'good'); }}>Copy snippet</Button>
-          </div>
-        )}
+            {isTelegram && (
+              <Input value={botToken} onChange={(e) => setBotToken(e.target.value)} placeholder="Bot token, e.g. 123456:ABC-DEF…" />
+            )}
 
-        {connected && (
-          <p className="text-sm text-good">{isWebsite ? 'Your widget is live' : 'Connected'} — replies go out{agent.autoSend ? ' automatically.' : ' once you approve each draft.'}</p>
+            <div>
+              {isWebsite ? (
+                <Button onClick={() => connect.mutate()} disabled={connect.isPending}><Globe size={16} /> Turn on widget</Button>
+              ) : isTelegram ? (
+                <Button onClick={connectTelegram} disabled={!botToken.trim() || connect.isPending}><Send size={16} /> Connect bot</Button>
+              ) : (
+                <Button onClick={() => connect.mutate()} disabled={connect.isPending}><QrCode size={16} /> {connect.isPending ? 'Starting…' : 'Connect WhatsApp'}</Button>
+              )}
+            </div>
+
+            {!isWebsite && !isTelegram && qr && (
+              <div className="rounded-lg border border-border p-4 text-center">
+                <p className="mb-2 text-sm text-muted-foreground">Open WhatsApp → Linked Devices → Link a device, then scan:</p>
+                <img src={qr} alt="QR code" className="mx-auto h-56 w-56 rounded bg-white p-2" />
+              </div>
+            )}
+
+            {isWebsite && <SnippetBlock />}
+          </>
         )}
       </Card>
 

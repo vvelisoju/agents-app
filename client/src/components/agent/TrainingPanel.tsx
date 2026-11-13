@@ -68,30 +68,21 @@ export function TrainingPanel({ id }: { id: string }) {
   const [fact, setFact] = React.useState('');
   const [linkName, setLinkName] = React.useState('');
   const [linkUrl, setLinkUrl] = React.useState('');
+  const addFact = () => { if (fact.trim()) { addSource.mutate({ type: 'fact', data: { content: fact.trim() } }); setFact(''); } };
+  const addLink = () => { if (linkName.trim() && linkUrl.trim()) { addSource.mutate({ type: 'link', data: { name: linkName.trim(), url: linkUrl.trim() } }); setLinkName(''); setLinkUrl(''); } };
 
   return (
     <div className="space-y-4">
-      {/* Quick setup by business type — one tap pre-fills the persona */}
-      <Card className="space-y-2 p-4">
-        <div className="font-medium">Quick setup by business type</div>
-        <p className="text-sm text-muted-foreground">Pick the closest — it sets a good starting persona in one tap.</p>
-        <div className="flex flex-wrap gap-2">
-          {templates.map((t) => (
-            <button key={t.id} onClick={() => applyTemplate.mutate(t.id)} disabled={applyTemplate.isPending}
-              className="rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary disabled:opacity-50">
-              {t.emoji} {t.label}
-            </button>
-          ))}
+      {/* Fastest path: paste a link, the agent reads it. */}
+      <Card className="space-y-3 border-primary/30 p-4">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-primary" />
+          <span className="font-medium">Set up from your website</span>
         </div>
-      </Card>
-
-      {/* Train from a link — the default, no-typing path */}
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center gap-2"><Sparkles size={16} className="text-primary" /><span className="font-medium">Set up from a link</span></div>
-        <p className="text-sm text-muted-foreground">Paste your website, Google, Instagram or Facebook link — the agent reads it for you.</p>
+        <p className="text-sm text-muted-foreground">Paste a link — website, Google, Instagram or Facebook — and the agent reads it for you. This is the quickest way to get started.</p>
         <div className="flex gap-2">
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="your-business.com" onKeyDown={(e) => e.key === 'Enter' && url && learn.mutate()} />
-          <Button disabled={!url || learn.isPending} onClick={() => learn.mutate()}>{learn.isPending ? 'Reading…' : 'Read it'}</Button>
+          <Input className="flex-1" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="your-business.com" onKeyDown={(e) => e.key === 'Enter' && url && learn.mutate()} />
+          <Button className="shrink-0 whitespace-nowrap" disabled={!url || learn.isPending} onClick={() => learn.mutate()}>{learn.isPending ? 'Reading…' : 'Read & set up'}</Button>
         </div>
 
         {draft && (
@@ -109,6 +100,19 @@ export function TrainingPanel({ id }: { id: string }) {
             </div>
           </div>
         )}
+
+        {/* No website? One-tap persona by business type. */}
+        <div className="border-t border-border pt-3">
+          <p className="mb-2 text-sm text-muted-foreground">No link handy? Pick your business type instead:</p>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <button key={t.id} onClick={() => applyTemplate.mutate(t.id)} disabled={applyTemplate.isPending}
+                className="rounded-full border border-border px-3 py-1.5 text-sm transition-colors hover:border-primary disabled:opacity-50">
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       {/* What it knows + manual enrichment */}
@@ -126,26 +130,32 @@ export function TrainingPanel({ id }: { id: string }) {
         </div>
         <Button size="sm" disabled={saveProfile.isPending} onClick={() => saveProfile.mutate()}>Save instructions</Button>
 
-        <div className="space-y-2 pt-2">
-          {(data?.sources || []).map((s: any) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 border-b border-border pb-2 text-sm">
-              <span className="flex items-center gap-2">
-                <Badge variant={s.type === 'link' ? 'primary' : 'default'}>{s.type}</Badge>
-                <span className="text-muted-foreground">{s.type === 'fact' ? s.data.content : s.type === 'link' ? `${s.data.name}: ${s.data.url}` : `${s.data.question}`}</span>
-              </span>
-              <button onClick={() => delSource.mutate(s.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={15} /></button>
-            </div>
-          ))}
-        </div>
+        {(data?.sources || []).length > 0 && (
+          <div className="space-y-2 pt-2">
+            {(data?.sources || []).map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 border-b border-border pb-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Badge variant={s.type === 'link' ? 'primary' : 'default'}>{s.type}</Badge>
+                  <span className="truncate text-muted-foreground">{s.type === 'fact' ? s.data.content : s.type === 'link' ? `${s.data.name}: ${s.data.url}` : `${s.data.question}`}</span>
+                </span>
+                <button aria-label="Remove" onClick={() => delSource.mutate(s.id)} className="shrink-0 text-muted-foreground hover:text-destructive"><Trash2 size={15} /></button>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <div className="flex gap-2">
-          <Input value={fact} onChange={(e) => setFact(e.target.value)} placeholder="Add a fact, e.g. Open desk ₹3,999/mo" onKeyDown={(e) => { if (e.key === 'Enter' && fact.trim()) { addSource.mutate({ type: 'fact', data: { content: fact.trim() } }); setFact(''); } }} />
-          <Button size="sm" variant="ghost" disabled={!fact.trim()} onClick={() => { addSource.mutate({ type: 'fact', data: { content: fact.trim() } }); setFact(''); }}><Plus size={15} /></Button>
-        </div>
-        <div className="flex gap-2">
-          <Input className="w-1/3" value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="Link name" />
-          <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" />
-          <Button size="sm" variant="ghost" disabled={!linkName.trim() || !linkUrl.trim()} onClick={() => { addSource.mutate({ type: 'link', data: { name: linkName.trim(), url: linkUrl.trim() } }); setLinkName(''); setLinkUrl(''); }}><Plus size={15} /></Button>
+        <div className="space-y-2 border-t border-border pt-3">
+          <Label>Add a fact</Label>
+          <div className="flex gap-2">
+            <Input className="flex-1" value={fact} onChange={(e) => setFact(e.target.value)} placeholder="e.g. Open desk ₹3,999/mo" onKeyDown={(e) => e.key === 'Enter' && addFact()} />
+            <Button size="sm" variant="ghost" className="shrink-0" disabled={!fact.trim()} onClick={addFact}><Plus size={15} /> Add</Button>
+          </div>
+          <Label>Add a shareable link</Label>
+          <div className="flex flex-wrap gap-2">
+            <Input className="w-full sm:w-1/3" value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="Link name, e.g. Pricing" />
+            <Input className="min-w-0 flex-1" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" onKeyDown={(e) => e.key === 'Enter' && addLink()} />
+            <Button size="sm" variant="ghost" className="shrink-0" disabled={!linkName.trim() || !linkUrl.trim()} onClick={addLink}><Plus size={15} /> Add</Button>
+          </div>
         </div>
       </Card>
     </div>
