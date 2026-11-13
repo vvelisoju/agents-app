@@ -3,6 +3,8 @@ import { composeSystemPrompt, applyLinks, trainingSummary, Source } from '../src
 import { TEMPLATES, getTemplate } from '../src/lib/templates';
 import { normaliseUrl, extractReadable } from '../src/lib/learn';
 import { normalizeUpdate } from '../src/channels/telegram';
+import { verifyPaymentSignature } from '../src/lib/razorpay';
+import crypto from 'crypto';
 
 const agent = { name: 'Secure Studio' };
 const profile = {
@@ -73,6 +75,17 @@ describe('telegram normalizeUpdate', () => {
     expect(normalizeUpdate({ message: { chat: { id: 1 }, photo: [] } })).toBeNull();
     expect(normalizeUpdate({})).toBeNull();
     expect(normalizeUpdate(null)).toBeNull();
+  });
+});
+
+describe('razorpay signature', () => {
+  it('verifies a correct HMAC signature and rejects a wrong one', () => {
+    const prev = process.env.RAZORPAY_KEY_SECRET;
+    process.env.RAZORPAY_KEY_SECRET = 'test_secret';
+    const sig = crypto.createHmac('sha256', 'test_secret').update('order_1|pay_1').digest('hex');
+    expect(verifyPaymentSignature('order_1', 'pay_1', sig)).toBe(true);
+    expect(verifyPaymentSignature('order_1', 'pay_1', 'deadbeef')).toBe(false);
+    process.env.RAZORPAY_KEY_SECRET = prev;
   });
 });
 

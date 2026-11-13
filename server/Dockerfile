@@ -1,5 +1,6 @@
 # Server image. Bundles Chromium for whatsapp-web.js.
-# Prisma provider is "postgresql" — set DATABASE_URL to a postgres connection string.
+# The repo schema is SQLite for zero-setup dev; this image switches it to PostgreSQL
+# at build time. Set DATABASE_URL to a postgres connection string.
 FROM node:20-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,6 +16,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+# Production image runs on PostgreSQL (dev/tests stay SQLite).
+RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 RUN npx prisma generate
 
 EXPOSE 4000
