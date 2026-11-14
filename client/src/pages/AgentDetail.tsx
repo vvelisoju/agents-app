@@ -11,6 +11,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { TrainingPanel } from '@/components/agent/TrainingPanel';
 import { TestPanel } from '@/components/agent/TestPanel';
 import { ChatsPanel } from '@/components/agent/ChatsPanel';
+import { VersionsPanel } from '@/components/agent/VersionsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -101,10 +102,11 @@ export function AgentDetail({ id }: { id: string }) {
         </div>
 
         <div className="space-y-4">
-          <Tabs tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }]} value={tab} onChange={setTab} />
+          <Tabs tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }, { id: 'versions', label: 'Versions' }]} value={tab} onChange={setTab} />
           {tab === 'train' && <TrainingPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
+          {tab === 'versions' && <VersionsPanel id={id} />}
         </div>
       </div>
     </div>
