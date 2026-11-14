@@ -51,3 +51,11 @@ export function memoryBlock(memories: ParsedMemory[]): string {
   const lines = memories.map((m) => `- ${m.key}: ${m.value}`).join('\n');
   return `What you already know about this customer (from past chats):\n${lines}`;
 }
+
+// The instruction that turns the feature on for the model. Without it the model never emits
+// [[REMEMBER:…]], so recall stays empty — this is what makes MEMORY_ENABLED actually do something.
+export const MEMORY_INSTRUCTION =
+  'If you learn a durable fact about this customer — their name, what they want, a preference, ' +
+  'a decision they made — record it with [[REMEMBER:key=value]] in your reply (e.g. [[REMEMBER:name=Priya]]). ' +
+  'It is saved privately, recalled in future chats, and removed before the customer sees it. ' +
+  'Only remember stable facts, not small talk.';

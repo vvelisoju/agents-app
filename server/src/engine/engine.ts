@@ -14,7 +14,7 @@ import { InboundMessage } from '../channels/types';
 import { outboundEnabled, memoryEnabled } from '../lib/spineEnv';
 import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
 import { withSendLock } from '../lib/sendMutex';
-import { recallMemory, rememberFacts, extractMemory, memoryBlock } from '../lib/memory';
+import { recallMemory, rememberFacts, extractMemory, memoryBlock, MEMORY_INSTRUCTION } from '../lib/memory';
 import { runAgenticLoop } from './agentic';
 
 // TOOL-14: an agent's enabled tool allowlist (JSON string[]), empty by default.
@@ -207,8 +207,11 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   // no-op when there is nothing remembered, so the reply is byte-for-byte today's when off.
   let systemForTurn = system;
   if (memoryEnabled()) {
+    const parts = [system];
     const block = memoryBlock(await recallMemory(agentId, inbound.from));
-    if (block) systemForTurn = `${system}\n\n${block}`;
+    if (block) parts.push(block);
+    parts.push(MEMORY_INSTRUCTION); // tell the model it CAN remember (otherwise it never does)
+    systemForTurn = parts.join('\n\n');
   }
   const history = (await prisma.message.findMany({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' }, take: 8 }))
     .reverse().map((m) => `${m.direction === 'outbound' ? 'Me (business)' : 'Customer'}: ${m.body}`).join('\n');

@@ -57,6 +57,15 @@ describe('memory in processInbound (MK-9)', () => {
     const system = gen.mock.calls[0][0].system as string;
     expect(system).toContain('What you already know about this customer');
     expect(system).toContain('name: Priya');
+    expect(system).toContain('[[REMEMBER:key=value]]'); // the instruction that activates the feature
+  });
+
+  it('adds the remember-instruction when enabled even with no stored memory', async () => {
+    process.env.MEMORY_ENABLED = '1';
+    const { agent } = await createOrgWithAgent({ autoSend: true });
+    gen.mockResolvedValue(reply('Hi!'));
+    await processInbound(agent.id, inbound('hi'));
+    expect(gen.mock.calls[0][0].system as string).toContain('[[REMEMBER:key=value]]');
   });
 
   it('with MEMORY_ENABLED off, the prompt and reply are byte-for-byte today (no recall, no store)', async () => {
