@@ -15,7 +15,7 @@ export const resetSchema = z.object({ phone, otp, password });
 
 export const createAgentSchema = z.object({
   name: z.string().trim().min(1, 'name is required').max(100),
-  channelType: z.enum(['whatsapp-web', 'website', 'telegram']).optional(),
+  channelType: z.enum(['whatsapp-web', 'website', 'telegram', 'linkedin-browser']).optional(),
 });
 
 export const sourceSchema = z.object({
