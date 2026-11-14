@@ -112,3 +112,11 @@ export async function listAccounts(orgId: string): Promise<MaskedAccount[]> {
     orderBy: { createdAt: 'desc' },
   });
 }
+
+/** Revoke (delete) a stored credential, org-scoped. Returns false if it doesn't belong to the org. */
+export async function revokeAccount(orgId: string, id: string): Promise<boolean> {
+  const row = await prisma.connectedAccount.findFirst({ where: { id, orgId } });
+  if (!row) return false;
+  await prisma.connectedAccount.delete({ where: { id: row.id } });
+  return true;
+}

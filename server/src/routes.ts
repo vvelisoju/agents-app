@@ -15,7 +15,7 @@ import { audit } from './lib/audit';
 import { asyncHandler } from './middleware/asyncHandler';
 import { TEMPLATES } from './lib/templates';
 import { listAdapters } from './channels/registry';
-import { workflowEnabled, monitorEnabled, outboundEnabled } from './lib/spineEnv';
+import { workflowEnabled, monitorEnabled, outboundEnabled, memoryEnabled } from './lib/spineEnv';
 
 // Mount every API module. One aggregator (ClassPe pattern).
 export function registerRoutes(app: Express) {
@@ -37,8 +37,21 @@ export function registerRoutes(app: Express) {
   // Server-authoritative feature flags so the UI only surfaces a scenario when its handler
   // is actually enabled (no dead-end controls). SCN-36 scenario flags + the spine flag.
   app.get('/api/config', authMiddleware, (_req, res) =>
-    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled() } }),
+    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled() } }),
   );
+
+  // SEC — connected integration credentials (masked; never returns a secret). Owner can revoke.
+  app.get('/api/connected-accounts', authMiddleware, asyncHandler(async (req, res) => {
+    const { listAccounts } = await import('./lib/connectedAccount');
+    res.json({ accounts: await listAccounts((req as any).user.orgId) });
+  }));
+  app.delete('/api/connected-accounts/:id', authMiddleware, requirePermission('connected_accounts'), asyncHandler(async (req, res) => {
+    const { revokeAccount } = await import('./lib/connectedAccount');
+    const ok = await revokeAccount((req as any).user.orgId, String(req.params.id));
+    if (!ok) return res.status(404).json({ error: 'not found' });
+    audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'connected_account.revoke', targetType: 'connected_account', targetId: String(req.params.id) });
+    res.json({ ok: true });
+  }));
   app.get('/api/templates', authMiddleware, (_req, res) =>
     res.json(TEMPLATES.map((t) => ({ id: t.id, label: t.label, emoji: t.emoji }))),
   );
