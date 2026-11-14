@@ -226,8 +226,21 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   const agentic = agent.executionMode === 'agentic' && enabledTools.length > 0;
   try {
     if (agentic) {
+      // When the agent can use the data connectors, tell the model which OWNER-DEFINED operations
+      // exist (names + params) so it can call them. The model still never writes SQL.
+      let agenticSystem = systemForTurn;
+      if (enabledTools.includes('data.query') || enabledTools.includes('data.action')) {
+        const { opsForAgent, describeOps } = await import('../lib/connectors');
+        const access = (agent as any).connectorAccess || 'customer';
+        const [reads, writes] = await Promise.all([
+          enabledTools.includes('data.query') ? opsForAgent(agent.orgId, access, 'read') : Promise.resolve([]),
+          enabledTools.includes('data.action') ? opsForAgent(agent.orgId, access, 'write') : Promise.resolve([]),
+        ]);
+        const block = describeOps(reads, writes);
+        if (block) agenticSystem = `${systemForTurn}\n\n${block}`;
+      }
       const r = await runAgenticLoop({
-        system: systemForTurn,
+        system: agenticSystem,
         userText: history || `Customer: ${text}`,
         enabledTools,
         ctx: { agent, orgId: agent.orgId, conversationId: conv.id, executionId },

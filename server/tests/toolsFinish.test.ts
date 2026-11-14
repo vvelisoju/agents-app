@@ -25,7 +25,12 @@ describe('per-tool-call step trace (TOOL-16/29)', () => {
     const r = await executeTool(tool, { token: 'secret-123', n: 5 }, ctx, { stepIndex: 0 });
     expect(r.ok).toBe(true);
 
-    const steps = await prisma.executionStep.findMany({ where: { executionId: 'exec-trace-1' } });
+    // The step row is written fire-and-forget (never blocks the tool), so wait for it.
+    let steps: any[] = [];
+    for (let i = 0; i < 40 && steps.length === 0; i++) {
+      steps = await prisma.executionStep.findMany({ where: { executionId: 'exec-trace-1' } });
+      if (!steps.length) await new Promise((res) => setTimeout(res, 25));
+    }
     expect(steps).toHaveLength(1);
     expect(steps[0].toolName).toBe('t.trace');
     expect(steps[0].outcome).toBe('ok');

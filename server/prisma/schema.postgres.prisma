@@ -69,6 +69,7 @@ model Agent {
   autoSend         Boolean          @default(false)
   executionMode    String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop)
   enabledToolsJson String? // TOOL-14: JSON string[] of enabled tool names; null/[] = no tools (reply stays byte-for-byte)
+  connectorAccess  String           @default("customer") // customer | admin — which ConnectorOps this agent may run
   currentVersionId String? // SPEC: active AgentVersion pointer; null = live-edit mode (default)
   lifecycleStatus  String           @default("draft") // SPEC: draft | active | paused | archived (NOT connection status)
   paused           Boolean          @default(false)
@@ -395,6 +396,43 @@ model ContactMemory {
   @@unique([agentId, contactNumber, key])
   @@index([orgId])
   @@index([agentId, contactNumber])
+}
+
+// ─── Configurable DB / REST connectors (agents call OWNER-DEFINED operations, never raw SQL) ───
+
+// A connection to an external datasource. secretEnc holds the encrypted connection string (DB) or
+// base config (REST: {baseUrl, headers}). Org-scoped; decrypted only at call time.
+model Connector {
+  id        String        @id @default(uuid())
+  orgId     String
+  name      String
+  kind      String // postgres | mysql | rest
+  secretEnc String // lib/crypto ciphertext — never logged/returned
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  ops       ConnectorOp[]
+
+  @@index([orgId])
+}
+
+// A named, parameterized operation the agent may invoke by name. The OWNER writes the SQL/endpoint
+// with typed params ($1/$2 or :name); the model only supplies param VALUES, bound safely — so the
+// model can never inject SQL or reach data the owner didn't expose. access gates customer vs admin;
+// sideEffect 'write' routes through approve-before-act.
+model ConnectorOp {
+  id          String    @id @default(uuid())
+  orgId       String
+  connectorId String
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  name        String // unique per org; what the model invokes, e.g. "get_lead_by_phone"
+  description String // shown to the model
+  access      String    @default("customer") // customer | admin
+  sideEffect  String    @default("read") // read | write
+  specJson    String // DB: {sql, params:[{name,type}]}; REST: {method, path, params:[...]}
+  createdAt   DateTime  @default(now())
+
+  @@unique([orgId, name])
+  @@index([connectorId])
 }
 
 // MK-16/17 — a chunk of a document/page's full text for retrieval (RAG). `embeddingJson` holds

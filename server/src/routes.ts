@@ -8,6 +8,8 @@ import billingRouter from './modules/billing/router';
 import analyticsRouter from './modules/analytics/router';
 import approvalsRouter from './modules/approvals/router';
 import workflowsRouter from './modules/workflows/router';
+import connectorsRouter from './modules/connectors/router';
+import transcribeRouter from './modules/transcribe/router';
 import prisma from './lib/prisma';
 import { authMiddleware } from './middleware/auth';
 import { requirePermission } from './middleware/authz';
@@ -38,7 +40,8 @@ export function registerRoutes(app: Express) {
   // is actually enabled (no dead-end controls). SCN-36 scenario flags + the spine flag.
   app.get('/api/config', authMiddleware, async (_req, res) => {
     const { embeddingsConfigured } = await import('./lib/embeddings');
-    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled(), rag: embeddingsConfigured() } });
+    const { transcribeConfigured } = await import('./lib/transcribe');
+    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled(), rag: embeddingsConfigured(), transcribe: transcribeConfigured() } });
   });
 
   // SEC — connected integration credentials (masked; never returns a secret). Owner can revoke.
@@ -75,6 +78,9 @@ export function registerRoutes(app: Express) {
   app.use('/api/analytics', authMiddleware, analyticsRouter);
   app.use('/api/approvals', authMiddleware, approvalsRouter);
   app.use('/api/workflows', authMiddleware, workflowsRouter);
+  app.use('/api/connectors', authMiddleware, connectorsRouter);
+  // Voice-to-text: proxy a short recording to the ASR service (key stays server-side).
+  app.use('/api/transcribe', authMiddleware, transcribeRouter);
 
   // Workspace (org) info + rename.
   app.get('/api/org', authMiddleware, asyncHandler(async (req, res) => {
