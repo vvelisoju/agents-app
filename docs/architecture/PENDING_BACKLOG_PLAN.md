@@ -2,6 +2,18 @@
 
 Status: Phases 0–6 core + the new scope (PDF ingestion, RAG, DB/REST connectors) are **built,
 deployed, and live-verified**. This plan covers what genuinely remains, classified and sequenced.
+
+> **Progress (updated):**
+> - **Wave 1:** connector **test-connection endpoint** ✅. SEC‑9 **skipped** (token already encrypted at
+>   rest via SEC‑2 — no security gain). SCN‑06/14 delivery receipts **deferred** (low value on the
+>   off-by-default, accepted-risk drip; needs provider-msg-id capture + ack mapping). DB‑14 **skipped**
+>   (per-query tenant filters already enforced; a broad refactor for marginal gain).
+> - **Wave 2 (high-value UIs):** ✅ **Connector config UI**, ✅ **Knowledge/RAG status UI**, ✅ **Outbound
+>   opt-out UI** — all deployed. STU‑24/29/31 pickers are effectively **covered** by the existing
+>   Abilities / Monitors / Campaigns tabs; STU‑27..35 is cosmetic polish.
+> - **Docs:** `CONNECTORS.md` (owner setup guide) ✅.
+> - **Net:** all high/medium-value buildable work is done. What remains is **marginal polish** (Wave 3
+>   QA/docs), **deferred-by-design** (B), or **owner-gated** (C).
 Every item follows the standing guardrails (additive, gated, reply path byte-for-byte, test-gated).
 
 > **Concurrent-session constraint:** another session is building a **voice/transcription** feature in
