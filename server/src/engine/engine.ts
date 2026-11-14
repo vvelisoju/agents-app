@@ -100,8 +100,29 @@ function currentHourInTz(tz: string): number {
   } catch { return new Date().getHours(); }
 }
 
-// Handle one normalised inbound message from any channel.
-export async function processInbound(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
+// FND-30: per-conversation serialization lock. Two messages from the SAME contact
+// (e.g. a rapid double-send, or Telegram's fire-and-forget handler) must not run
+// concurrently — otherwise each loads the same history and the agent double-replies.
+// Keyed by agent+contact so different conversations still run in parallel. The chain
+// is deleted once it drains, so the map never grows unbounded. Single-process only;
+// a horizontal move must swap this for a Postgres advisory lock (see QA-59).
+const convChains = new Map<string, Promise<unknown>>();
+
+function withConversationLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = convChains.get(key) ?? Promise.resolve();
+  const result = prev.then(fn, fn); // run after the previous one settles, pass or fail
+  const guarded = result.then(() => {}, () => {});
+  convChains.set(key, guarded);
+  guarded.then(() => { if (convChains.get(key) === guarded) convChains.delete(key); });
+  return result;
+}
+
+// Handle one normalised inbound message from any channel. Serialized per conversation.
+export function processInbound(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
+  return withConversationLock(`${agentId}:${inbound.from}`, () => processInboundLocked(agentId, inbound));
+}
+
+async function processInboundLocked(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
   const text = (inbound.text || '').trim();
   if (!worthReplying(text)) return { status: 'ignored' };
 

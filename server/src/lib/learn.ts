@@ -5,6 +5,7 @@
 // FAQs, shareable links). The heart of the invisible-UI training.
 // =============================================================
 import { askClaude } from './brain';
+import { safeFetch } from './ssrfGuard';
 
 export interface LearnSuggestion {
   summary: string;
@@ -45,8 +46,9 @@ async function fetchHtml(url: string): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      redirect: 'follow',
+    // safeFetch validates the target and every redirect hop against the SSRF guard
+    // (no loopback/private/link-local/169.254 metadata), replacing redirect:'follow'.
+    const res = await safeFetch(url, {
       signal: ctrl.signal,
       headers: {
         'User-Agent':
