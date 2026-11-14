@@ -62,6 +62,7 @@ const scoped = Router({ mergeParams: true });
 scoped.use(requireAgent);
 
 const agent = (req: any) => req.agent;
+const num = (v: unknown): number | undefined => (v == null || v === '' || Number.isNaN(Number(v)) ? undefined : Number(v));
 
 async function loadSources(agentId: string): Promise<Source[]> {
   const rows = await prisma.trainingSource.findMany({ where: { agentId }, orderBy: { createdAt: 'asc' } });
@@ -118,6 +119,64 @@ scoped.delete('/watches/:watchId', requirePermission('train_edit'), asyncHandler
   const ok = await deleteWatch((req as any).user.orgId, String(req.params.watchId));
   if (!ok) return res.status(404).json({ error: 'not found' });
   audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'watch.delete', targetType: 'watch', targetId: String(req.params.watchId) });
+  res.json({ ok: true });
+}));
+
+// ---- SCN-40 — outbound drip: connection, campaign start (approval-gated), progress, opt-outs ----
+scoped.get('/outbound/connection', asyncHandler(async (req, res) => {
+  const { getConnection } = await import('../outbound/service');
+  res.json({ connection: await getConnection((req as any).user.orgId, agent(req).id) });
+}));
+
+scoped.post('/outbound/connection', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { upsertConnection } = await import('../outbound/service');
+  const c = await upsertConnection({
+    orgId: (req as any).user.orgId, agentId: agent(req).id,
+    dailyCap: num(req.body?.dailyCap), windowStart: num(req.body?.windowStart), windowEnd: num(req.body?.windowEnd),
+    minGapSec: num(req.body?.minGapSec), maxGapSec: num(req.body?.maxGapSec),
+    token: req.body?.token ? String(req.body.token) : undefined,
+    acceptRisk: req.body?.acceptRisk === true,
+  });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'outbound.connection_upsert', targetType: 'agent', targetId: agent(req).id });
+  const { tokenEnc, ...rest } = c as any;
+  res.json({ connection: { ...rest, hasToken: !!tokenEnc } });
+}));
+
+scoped.post('/outbound/connection/active', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { setActive } = await import('../outbound/service');
+  const r = await setActive((req as any).user.orgId, agent(req).id, req.body?.active === true);
+  if (!r.ok) return res.status(r.reason === 'no_connection' ? 404 : 400).json({ error: r.reason });
+  res.json({ ok: true });
+}));
+
+scoped.post('/outbound/campaigns', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { startCampaign } = await import('../outbound/service');
+  const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : [];
+  const r = await startCampaign({
+    orgId: (req as any).user.orgId, agentId: agent(req).id, requestedBy: (req as any).user.id,
+    promo: String(req.body?.promo || ''), recipients,
+  });
+  if (!r.ok) return res.status(400).json({ error: r.reason });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'outbound.campaign_start', targetType: 'agent', targetId: agent(req).id, metadata: { campaignId: r.campaignId, recipients: r.recipients } });
+  res.json(r);
+}));
+
+scoped.get('/outbound/campaigns/:runId', asyncHandler(async (req, res) => {
+  const { campaignProgress } = await import('../outbound/service');
+  const p = await campaignProgress((req as any).user.orgId, String(req.params.runId));
+  if (!p) return res.status(404).json({ error: 'not found' });
+  res.json(p);
+}));
+
+scoped.get('/outbound/optouts', asyncHandler(async (req, res) => {
+  const { listOptOuts } = await import('../outbound/service');
+  res.json({ optOuts: await listOptOuts((req as any).user.orgId, agent(req).id) });
+}));
+
+scoped.delete('/outbound/optouts/:phone', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { removeOptOut } = await import('../outbound/service');
+  const ok = await removeOptOut((req as any).user.orgId, agent(req).id, String(req.params.phone));
+  if (!ok) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 }));
 
