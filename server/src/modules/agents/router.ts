@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, raw as rawBody } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { requireAgent } from '../../middleware/auth';
@@ -440,6 +440,25 @@ scoped.post('/training/learn', asyncHandler(async (req, res) => {
     res.json(await learnFromUrl(agent(req).name, url));
   } catch (e: any) {
     res.status(422).json({ error: e?.message || 'Could not learn from that link.' });
+  }
+}));
+
+// PDF / document ingestion — upload a PDF (raw bytes), extract its text, and condense it into a
+// confirmable training draft (same shape as /training/learn). express.json ignores the PDF
+// content-type, so this route-level raw parser owns the body. Max 15 MB; scanned/image PDFs that
+// yield no text return a friendly 422.
+scoped.post('/training/learn-document', rawBody({ type: ['application/pdf', 'application/octet-stream'], limit: '15mb' }), asyncHandler(async (req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || buf.length === 0) return res.status(400).json({ error: 'Upload a PDF file.' });
+  if (buf.slice(0, 5).toString('latin1') !== '%PDF-') return res.status(422).json({ error: 'That does not look like a PDF file.' });
+  try {
+    const { extractPdfText } = await import('../../lib/pdf');
+    const { learnFromText } = await import('../../lib/learn');
+    const filename = String(req.query.filename || 'document.pdf').slice(0, 120);
+    const { text, title } = await extractPdfText(buf);
+    res.json(await learnFromText(agent(req).name, text, filename, title));
+  } catch (e: any) {
+    res.status(422).json({ error: e?.message || 'Could not read that PDF.' });
   }
 }));
 

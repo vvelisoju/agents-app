@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest, queryClient } from '@/lib/api';
+import { apiRequest, queryClient, getToken } from '@/lib/api';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Sparkles, Trash2, Plus, X, Ban } from 'lucide-react';
+import { Sparkles, Trash2, Plus, X, Ban, Upload } from 'lucide-react';
 
 // The heart: train-from-link (no typing) + optional manual enrichment.
 export function TrainingPanel({ id }: { id: string }) {
@@ -37,21 +37,41 @@ export function TrainingPanel({ id }: { id: string }) {
     if (data?.profile) { setInstructions(data.profile.instructions || ''); setRestrictions(data.profile.restrictions || ''); }
   }, [data?.profile?.instructions, data?.profile?.restrictions]);
 
+  const applyLearn = (r: any) => {
+    const s = r?.suggestion || {};
+    setReview({
+      summary: s.summary || '',
+      instructions: s.instructions || '',
+      tone: s.tone,
+      language: s.language,
+      facts: [...(s.facts || [])],
+      faqs: [...(s.faqs || [])],
+      links: [...(s.links || [])],
+    });
+  };
+
   const learn = useMutation({
     mutationFn: () => apiRequest('POST', `/api/agents/${id}/training/learn`, { url }),
-    onSuccess: (r: any) => {
-      const s = r?.suggestion || {};
-      setReview({
-        summary: s.summary || '',
-        instructions: s.instructions || '',
-        tone: s.tone,
-        language: s.language,
-        facts: [...(s.facts || [])],
-        faqs: [...(s.faqs || [])],
-        links: [...(s.links || [])],
-      });
-    },
+    onSuccess: applyLearn,
     onError: (e: any) => toast(e.message || 'Could not read that link', 'warn'),
+  });
+
+  // PDF/document ingestion: upload the file's raw bytes; the server extracts + condenses it into
+  // the same reviewable draft as a website link.
+  const learnPdf = useMutation({
+    mutationFn: async (file: File) => {
+      const base = (import.meta as any).env?.VITE_API_URL || '';
+      const res = await fetch(`${base}/api/agents/${id}/training/learn-document?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf', ...(getToken() ? { Authorization: 'Bearer ' + getToken() } : {}) },
+        body: file,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || 'Could not read that PDF');
+      return body;
+    },
+    onSuccess: applyLearn,
+    onError: (e: any) => toast(e.message || 'Could not read that PDF', 'warn'),
   });
 
   const applyDraft = useMutation({
@@ -108,6 +128,19 @@ export function TrainingPanel({ id }: { id: string }) {
           <Input className="flex-1" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="your-business.com" onKeyDown={(e) => e.key === 'Enter' && url && learn.mutate()} />
           <Button className="shrink-0 whitespace-nowrap" disabled={!url || learn.isPending} onClick={() => learn.mutate()}>{learn.isPending ? 'Reading…' : 'Read & set up'}</Button>
         </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+        </div>
+        <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 ${learnPdf.isPending ? 'pointer-events-none opacity-60' : ''}`}>
+          <Upload size={15} />
+          {learnPdf.isPending ? 'Reading your PDF…' : 'Upload a PDF (brochure, catalogue, price list)'}
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) learnPdf.mutate(f); e.currentTarget.value = ''; }}
+          />
+        </label>
 
         {review && (
           <div className="space-y-3 rounded-lg border border-border p-3">

@@ -137,24 +137,29 @@ export async function learnFromUrl(agentName: string, rawUrl: string): Promise<L
   const url = normaliseUrl(rawUrl);
   const html = await fetchHtml(url);
   const { title, text } = extractReadable(html);
+  return learnFromText(agentName, text, url, title);
+}
 
+// Condense arbitrary extracted text (from a web page OR a PDF/document) into a confirmable
+// training draft. Shared by learnFromUrl and the document-upload path (PDF ingestion).
+export async function learnFromText(agentName: string, text: string, sourceLabel: string, title?: string): Promise<LearnResult> {
   if (text.replace(/\s/g, '').length < 40) {
     throw new Error(
-      "We couldn't read enough from that link automatically — it may need a login or load its content with " +
-      'JavaScript. Try your website link, or add a couple of facts by hand below.',
+      "We couldn't read enough from that document automatically — it may be a scan/image, need a login, or " +
+      'load its content with JavaScript. Try a different file or link, or add a couple of facts by hand below.',
     );
   }
 
   const system =
-    `You set up a friendly WhatsApp assistant for a small business by reading a page about that business. ` +
-    `From the page content, produce a training draft the owner can confirm in one glance. ` +
-    `Be faithful to the page — never invent prices, offers, phone numbers or facts that are not present. ` +
+    `You set up a friendly WhatsApp assistant for a small business by reading a document or page about that business. ` +
+    `From the content, produce a training draft the owner can confirm in one glance. ` +
+    `Be faithful to the source — never invent prices, offers, phone numbers or facts that are not present. ` +
     `Keep every item short and WhatsApp-ready. Respond with ONLY a JSON object, no prose, no markdown.`;
 
   const prompt =
     `Business/agent name: "${agentName}".\n` +
-    `Source link: ${url}\n\n` +
-    `PAGE CONTENT (title + meta + readable text):\n"""\n${text}\n"""\n\n` +
+    `Source: ${sourceLabel}\n\n` +
+    `CONTENT (title + meta + readable text):\n"""\n${text}\n"""\n\n` +
     `Return JSON with EXACTLY these keys:\n` +
     `{\n` +
     `  "summary": "one sentence describing what this business is/does",\n` +
@@ -173,8 +178,8 @@ export async function learnFromUrl(agentName: string, rawUrl: string): Promise<L
     if (!out.trim()) throw new Error('empty model output (possible refusal)');
     data = parseJson(out);
   } catch (e: any) {
-    console.error('learn: summarise failed for', url, '-', e?.message || e);
-    throw ownerError('We read the link but could not summarise it just now. Please try again in a moment.');
+    console.error('learn: summarise failed for', sourceLabel, '-', e?.message || e);
+    throw ownerError('We read the document but could not summarise it just now. Please try again in a moment.');
   }
 
   const suggestion: LearnSuggestion = {
@@ -193,5 +198,5 @@ export async function learnFromUrl(agentName: string, rawUrl: string): Promise<L
       .slice(0, 5),
   };
 
-  return { source: { url, title: title || url, chars: text.length }, suggestion };
+  return { source: { url: sourceLabel, title: title || sourceLabel, chars: text.length }, suggestion };
 }
