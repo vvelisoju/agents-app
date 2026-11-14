@@ -157,9 +157,27 @@ feature-gated sidebar nav (Campaigns/Monitors are agent-detail tabs today) · SC
 SCN-32/33/35 shared cross-agent lead record. EWS-22 metrics · EWS-33/34 retention sweeps · EWS-30/31 docs +
 pg-boss decision · EWS-32 inbound-durability ADR.
 
-### Phase 6 (not started) — the remaining big build
-Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). **Appointment booking**
-(SCN-20..25) lands here because `calendar.book` is a registry tool on the agentic path.
+### Phase 6 — Tools, agentic loop & booking (CORE DONE)
+| Task | Status | Notes |
+|---|---|---|
+| TOOL-01/02/03 contract + registry + execute | ✅ | `tools/types.ts` (MCP-shaped), `tools/registry.ts`, `tools/execute.ts` (input/output zod validation, side-effect gating [read inline; write/external → Approval, no act until approved], timeout + one retry, in-execution idempotency, one structured log line). |
+| TOOL-08/09/10/11 builtin tools | ✅ | knowledge.search (read), crm.create_lead/update_lead (write, org-scoped), web.fetch_page (external, SSRF-guarded), calendar.book (external, double-book guard + idempotent). Self-register at boot (TOOL-28). |
+| TOOL-04/05/06/14/21 gateway + agentic loop | ✅ | model-gateway tools array (zod→JSON via `z.toJSONSchema`) + toolCalls; `engine/agentic.ts` bounded loop (budget before every turn, turn + tool caps, allowlist-only, untrusted tool_result blocks); engine branch taken only for agentic agents — reply path byte-identical. Agent.enabledToolsJson column (**on prod**). |
+| TOOL-15/17 tools API + picker | ✅ | GET/PUT /api/agents/:id/tools; client `AbilitiesPanel` (outcome-named toggles, approval implication in words, enabling flips to agentic). |
+| POL-10/TOOL-19 approval executor | ✅ | `policy/approvalExecutor.ts` (DI seam) + `tools/approvalRunner.ts`: approving a gated tool call runs it `preApproved` exactly once. |
+| SCN-20/22/24/25/41 booking | ✅ | Booking model (**on prod**) + calendar.book + bookings read/cancel API + client `BookingsPanel`. |
+| TOOL-22/23/24 + SCN-25 tests | ✅ | `tools.test.ts` (9), `agentic.test.ts` (5), `booking.test.ts` (5). **214 total green, tsc clean.** |
+
+### Phase 6 — remaining
+TOOL-07 channel.send_message tool · TOOL-16/18/29 per-tool-call step trace + execution viewer UI · TOOL-13
+AgentSpec.tools[] round-trip + version snapshot · TOOL-25 'adding a tool' docs · TOOL-26 MCP-client decision
+record · TOOL-12 + MK-* pgvector RAG (deferred until a tenant's KB exceeds the prompt budget — small KBs stay
+prompt-stuffed). SCN-32/33/35 shared cross-agent lead record. EWS-22/33/34 metrics + retention sweeps.
+
+### Scenarios now built on the spine (all gated/opt-in, prod byte-for-byte until enabled)
+Reply (always on) · **Website monitor** (MONITOR_ENABLED) · **Outbound QR drip** (OUTBOUND_ENABLED) ·
+**Appointment booking** (per-agent calendar.book ability). Tools/agentic are per-agent (executionMode),
+no global flag. 6 migrations applied to Railway prod this session; reply path unchanged throughout.
 
 ### Phases 6 (not started)
 Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). Booking's calendar.book tool
