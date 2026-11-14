@@ -366,6 +366,8 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   // Owner-defined alert condition (free text). null/empty clears → default is used.
   if (req.body?.alertCondition === null || req.body?.alertCondition === '') data.alertCondition = null;
   else if (typeof req.body?.alertCondition === 'string') data.alertCondition = req.body.alertCondition.trim().slice(0, 600);
+  // Connector access level: 'admin' lets this agent run admin-tagged data operations.
+  if (req.body?.connectorAccess === 'customer' || req.body?.connectorAccess === 'admin') data.connectorAccess = req.body.connectorAccess;
   const updated = await prisma.agent.update({ where: { id: agent(req).id }, data });
   res.json(updated);
 }));

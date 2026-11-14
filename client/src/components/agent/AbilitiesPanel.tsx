@@ -19,6 +19,9 @@ const FRIENDLY: Record<string, { title: string; blurb: string }> = {
   'crm.update_lead': { title: 'Update lead status & notes', blurb: 'Mark a lead hot, add notes.' },
   'web.fetch_page': { title: 'Read a web page', blurb: 'Open a public link you point it to and read it.' },
   'calendar.book': { title: 'Book appointments', blurb: 'Offer a slot and book it — you confirm each one first.' },
+  'channel.send_message': { title: 'Send a message', blurb: 'Message a contact — you approve each send.' },
+  'data.query': { title: 'Look up your business data', blurb: 'Run a read operation you configured in Connectors (leads, orders…).' },
+  'data.action': { title: 'Update your business data', blurb: 'Run a write operation (update a status, create a record) — you approve each one.' },
 };
 const friendly = (name: string) => FRIENDLY[name] || { title: name, blurb: '' };
 
@@ -43,6 +46,15 @@ export function AbilitiesPanel({ id }: { id: string }) {
     if (on) next.add(name); else next.delete(name);
     save.mutate([...next]);
   };
+
+  // Admin data access: only relevant once a data connector ability is on.
+  const dataOn = tools.some((t) => (t.name === 'data.query' || t.name === 'data.action') && t.enabled);
+  const { data: agent } = useQuery<any>({ queryKey: ['/api/agents/' + id] });
+  const setAccess = useMutation({
+    mutationFn: (level: string) => apiRequest('PATCH', `/api/agents/${id}`, { connectorAccess: level }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/agents/' + id] }); toast('Data access level updated.', 'good'); },
+    onError: (e: any) => toast(e.message || 'Could not update', 'warn'),
+  });
 
   return (
     <div className="space-y-4">
@@ -76,6 +88,21 @@ export function AbilitiesPanel({ id }: { id: string }) {
         })}
         {tools.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No abilities available.</p>}
       </div>
+
+      {dataOn && (
+        <Card className="flex items-start justify-between gap-3 p-3.5">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Admin data access</div>
+            <div className="text-xs text-muted-foreground">
+              On: this agent can run operations you marked <b>admin</b> (e.g. internal/staff queries). Keep off for customer-facing agents.
+            </div>
+          </div>
+          <Switch
+            checked={agent?.connectorAccess === 'admin'}
+            onCheckedChange={(v) => !setAccess.isPending && setAccess.mutate(v ? 'admin' : 'customer')}
+          />
+        </Card>
+      )}
     </div>
   );
 }

@@ -87,14 +87,24 @@ describe('data.query tool over a REST connector', () => {
     expect(calledUrl).toBe('https://api.example.com/orders/A%20B%2F42'); // param URL-encoded (no path breakout)
   });
 
-  it('refuses an operation the agent is not allowed to run', async () => {
+  it('refuses an operation the agent is not allowed to run, until it is granted admin access', async () => {
     const org = await createOrg();
+    const token = (await createUser(org.id, 'owner')).token;
     const agent = await createAgent(org.id, { connectorAccess: 'customer' } as any);
-    const conn = await prisma.connector.create({ data: { orgId: org.id, name: 'api', kind: 'rest', secretEnc: encryptSecret('{}') } });
-    await prisma.connectorOp.create({ data: { orgId: org.id, connectorId: conn.id, name: 'admin_wipe', description: 'd', access: 'admin', sideEffect: 'read', specJson: '{}' } });
-    const r: any = await dataQuery.execute({ operation: 'admin_wipe' } as any, { agent, orgId: org.id } as any);
-    expect(r.ok).toBe(false);
-    expect(r.error).toContain('no such');
+    const conn = await prisma.connector.create({ data: { orgId: org.id, name: 'db', kind: 'rest', secretEnc: encryptSecret(JSON.stringify({ baseUrl: 'https://api.example.com' })) } });
+    await prisma.connectorOp.create({ data: { orgId: org.id, connectorId: conn.id, name: 'admin_lookup', description: 'd', access: 'admin', sideEffect: 'read', specJson: JSON.stringify({ method: 'GET', path: '/x', params: [] }) } });
+
+    // Customer agent → denied.
+    const denied: any = await dataQuery.execute({ operation: 'admin_lookup' } as any, { agent, orgId: org.id } as any);
+    expect(denied.ok).toBe(false);
+    expect(denied.error).toContain('no such');
+
+    // Grant admin access via the agent PATCH, then it resolves the op.
+    await request(app).patch(`/api/agents/${agent.id}`).set(auth(token)).send({ connectorAccess: 'admin' });
+    const adminAgent = await prisma.agent.findUnique({ where: { id: agent.id } });
+    expect((adminAgent as any).connectorAccess).toBe('admin');
+    const ops = await opsForAgent(org.id, 'admin', 'read');
+    expect(ops.map((o) => o.name)).toContain('admin_lookup');
   });
 });
 
