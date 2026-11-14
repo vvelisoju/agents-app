@@ -7,6 +7,7 @@ import teamRouter from './modules/team/router';
 import billingRouter from './modules/billing/router';
 import analyticsRouter from './modules/analytics/router';
 import approvalsRouter from './modules/approvals/router';
+import workflowsRouter from './modules/workflows/router';
 import prisma from './lib/prisma';
 import { authMiddleware } from './middleware/auth';
 import { requirePermission } from './middleware/authz';
@@ -53,6 +54,7 @@ export function registerRoutes(app: Express) {
   app.use('/api/billing', authMiddleware, billingRouter);
   app.use('/api/analytics', authMiddleware, analyticsRouter);
   app.use('/api/approvals', authMiddleware, approvalsRouter);
+  app.use('/api/workflows', authMiddleware, workflowsRouter);
 
   // Workspace (org) info + rename.
   app.get('/api/org', authMiddleware, asyncHandler(async (req, res) => {

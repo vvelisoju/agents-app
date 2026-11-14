@@ -74,6 +74,12 @@ scoped.get('/widget-key', asyncHandler(async (req, res) => {
   res.json({ key: widgetKey(agent(req).id) });
 }));
 
+// EWS-18 — this agent's workflow runs (org + agent scoped).
+scoped.get('/workflows', asyncHandler(async (req, res) => {
+  const { listRuns } = await import('../workflows/service');
+  res.json({ runs: await listRuns((req as any).user.orgId, { agentId: agent(req).id, limit: 100 }) });
+}));
+
 // ---- SPEC-13..18 / STU — Agent Spec, versioning, lifecycle & clone ----
 scoped.get('/spec', asyncHandler(async (req, res) => {
   res.json({ spec: await specFromAgent(agent(req).id) });
