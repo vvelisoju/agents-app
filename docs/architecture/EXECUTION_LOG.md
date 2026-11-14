@@ -188,11 +188,11 @@ flip when a tenant KB exceeds the prompt budget).
 | **0 — Gate hardening** | test setup: schema built once/run + fast per-file table-clear; 167s→68s, scales flat | ✅ |
 | **1 — Phase-6 finish** | TOOL-07/13/16/18/25/26/29 (above) | ✅ |
 | 2 — RAG decision/core (MK) | pgvector — mostly deferred by design; confirm scope | ⬜ |
-| 3 — UX breadth | approvals inbox, insights, connected-accounts, STU pickers, SCN-37/38 nav | ⬜ |
+| 3 — UX breadth | ✅ Approvals inbox (POL-16/20, inbox-approve resumes campaign runs) · ✅ Insights page (OBS client) · ✅ nav (Automations/Approvals/Insights, SCN-38). Remaining: connected-accounts (needs new backend), SCN-37 scenario picker (lower value — scenario tabs already exist) | 🔨 |
 | 4 — QA + PXD sweep | remaining test coverage + docs across modules | ⬜ |
 | 5 — Owner-gated checklist | SEC token-hash, NOT-NULL, DR drill, Phase-7 — **needs owner** | ⬜ |
 
-**Baseline:** 218 tests green, server+client tsc clean. 7 migrations applied to Railway prod total; reply path
+**Baseline:** 220 tests green, server+client tsc clean. 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)
