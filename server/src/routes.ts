@@ -45,6 +45,24 @@ export function registerRoutes(app: Express) {
     res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled(), rag: embeddingsConfigured(), transcribe: transcribeConfigured() } });
   });
 
+  // PXD-29 — introspect the self-registered extension seams (channels, tools, workflow
+  // handlers). Proves the registry pattern end-to-end and powers "what can this build do".
+  // Read-only, auth-gated; the 'test' adapter is hidden as elsewhere.
+  app.get('/api/_meta/registries', authMiddleware, async (_req, res) => {
+    const { listAdapters } = await import('./channels/registry');
+    const { listTools } = await import('./tools/registry');
+    const { listWorkflows } = await import('./workflow/registry');
+    res.json({
+      channels: listAdapters().filter((a) => a.type !== 'test').map((a) => ({
+        type: a.type, label: a.label ?? a.type, onboarding: a.onboarding, ready: a.ready !== false,
+      })),
+      tools: listTools().map((t) => ({
+        name: t.name, description: t.description, sideEffect: t.sideEffect, needsApproval: !!(t.approvalAction || t.sideEffect === 'write' || t.sideEffect === 'external'),
+      })),
+      workflowHandlers: listWorkflows(),
+    });
+  });
+
   // SEC — connected integration credentials (masked; never returns a secret). Owner can revoke.
   app.get('/api/connected-accounts', authMiddleware, asyncHandler(async (req, res) => {
     const { listAccounts } = await import('./lib/connectedAccount');
