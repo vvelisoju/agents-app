@@ -102,6 +102,28 @@ export async function knowledgeStatus(agentId: string): Promise<{ chunks: number
   return { chunks, embedded };
 }
 
+export interface KnowledgeSource { label: string; chunks: number; embedded: number }
+
+// MK-27 — per-document breakdown (grouped by the sourceLabel used at ingest), so the owner can
+// see exactly which uploaded documents contribute knowledge and how much of it is embedded.
+export async function knowledgeSources(agentId: string): Promise<KnowledgeSource[]> {
+  const rows = await prisma.knowledgeChunk.findMany({ where: { agentId }, select: { sourceLabel: true, embeddingJson: true } });
+  const by = new Map<string, { chunks: number; embedded: number }>();
+  for (const r of rows) {
+    const e = by.get(r.sourceLabel) || { chunks: 0, embedded: 0 };
+    e.chunks++; if (r.embeddingJson) e.embedded++;
+    by.set(r.sourceLabel, e);
+  }
+  return [...by.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// MK-19 — invalidate a document's knowledge: delete every chunk ingested under this sourceLabel
+// so retrieval can no longer surface stale content. Returns how many chunks were removed.
+export async function removeKnowledgeSource(agentId: string, sourceLabel: string): Promise<{ removed: number }> {
+  const r = await prisma.knowledgeChunk.deleteMany({ where: { agentId, sourceLabel } });
+  return { removed: r.count };
+}
+
 function safeVec(json: string): number[] {
   try { const v = JSON.parse(json); return Array.isArray(v) ? v : []; } catch { return []; }
 }

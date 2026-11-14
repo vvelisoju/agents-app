@@ -8,7 +8,7 @@ vi.mock('../src/lib/embeddings', async (orig) => {
 });
 
 import prisma from '../src/lib/prisma';
-import { chunkText, ingestChunks, searchChunks } from '../src/lib/knowledge';
+import { chunkText, ingestChunks, searchChunks, knowledgeSources, removeKnowledgeSource } from '../src/lib/knowledge';
 import { cosineSim, embeddingsConfigured, embed } from '../src/lib/embeddings';
 import { knowledgeSearch } from '../src/tools/builtin/knowledge';
 import { createOrg, createAgent } from './helpers/factories';
@@ -75,6 +75,24 @@ describe('vector search (embeddings configured, mocked)', () => {
     const hits = await searchChunks(agent.id, 'anything', 2);
     expect(hits[0].text).toBe('beta content'); // nearest by cosine
     expect(hits[0].score).toBeGreaterThan(hits[1].score);
+  });
+});
+
+describe('per-source breakdown + invalidation (MK-27/MK-19)', () => {
+  it('groups chunks by source and removes one source cleanly', async () => {
+    const org = await createOrg();
+    const agent = await createAgent(org.id);
+    await ingestChunks(org.id, agent.id, 'brochure.pdf', 'x'.repeat(1500)); // >1 chunk
+    await ingestChunks(org.id, agent.id, 'pricing.pdf', 'Hot desk Rs 3999.');
+
+    const sources = await knowledgeSources(agent.id);
+    expect(sources.map((s) => s.label)).toEqual(['brochure.pdf', 'pricing.pdf']); // sorted
+    expect(sources.find((s) => s.label === 'brochure.pdf')!.chunks).toBeGreaterThan(1);
+
+    const { removed } = await removeKnowledgeSource(agent.id, 'brochure.pdf');
+    expect(removed).toBeGreaterThan(0);
+    const after = await knowledgeSources(agent.id);
+    expect(after.map((s) => s.label)).toEqual(['pricing.pdf']); // only the other source remains
   });
 });
 

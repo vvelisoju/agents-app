@@ -488,16 +488,26 @@ scoped.post('/training/learn-document', rawBody({ type: ['application/pdf', 'app
   }
 }));
 
-// MK — knowledge index status (chunk + embedded counts, provider) and a re-embed trigger.
+// MK-27 — knowledge index status (chunk + embedded counts, provider) plus the per-document
+// breakdown so the owner sees exactly which uploads contribute knowledge.
 scoped.get('/knowledge', asyncHandler(async (req, res) => {
-  const { knowledgeStatus } = await import('../../lib/knowledge');
+  const { knowledgeStatus, knowledgeSources } = await import('../../lib/knowledge');
   const { embeddingsStatus } = await import('../../lib/embeddings');
-  res.json({ ...(await knowledgeStatus(agent(req).id)), embeddings: embeddingsStatus() });
+  const [status, sources] = await Promise.all([knowledgeStatus(agent(req).id), knowledgeSources(agent(req).id)]);
+  res.json({ ...status, sources, embeddings: embeddingsStatus() });
 }));
 
 scoped.post('/knowledge/reindex', requirePermission('train_edit'), asyncHandler(async (req, res) => {
   const { reindexAgent } = await import('../../lib/knowledge');
   res.json(await reindexAgent(agent(req).id));
+}));
+
+// MK-19 — remove one uploaded document's knowledge (deletes its chunks so retrieval drops it).
+scoped.delete('/knowledge/sources', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const label = String(req.query.label || req.body?.label || '');
+  if (!label) return res.status(400).json({ error: 'label required' });
+  const { removeKnowledgeSource } = await import('../../lib/knowledge');
+  res.json(await removeKnowledgeSource(agent(req).id, label));
 }));
 
 scoped.post('/training/sources', validate(sourceSchema), asyncHandler(async (req, res) => {
