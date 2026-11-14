@@ -66,12 +66,18 @@ function worthReplying(body: string): boolean {
   return !ACKS.has(t);
 }
 
-function buildPrompt(convoText: string): string {
+// SCN-01: channel label defaults to "WhatsApp" so existing WhatsApp prompts are byte-identical.
+function buildPrompt(convoText: string, channel = 'WhatsApp'): string {
   return (
-    `Here is the recent WhatsApp conversation with a customer:\n\n${convoText}\n\n` +
+    `Here is the recent ${channel} conversation with a customer:\n\n${convoText}\n\n` +
     `Write the business's next reply to the customer's most recent message. ` +
     `Reply with ONLY the message text to send, nothing else.`
   );
+}
+
+// The channel display name for prompts, from the adapter (falls back to WhatsApp).
+function channelLabel(channelType: string): string {
+  return getAdapter(channelType)?.label || 'WhatsApp';
 }
 
 async function loadTraining(agentId: string): Promise<{ profile: any; sources: Source[] }> {
@@ -87,7 +93,7 @@ async function loadTraining(agentId: string): Promise<{ profile: any; sources: S
 export async function draftFor(agent: any, message: string): Promise<{ draft: string; urgentReason: string | null }> {
   const { profile, sources } = await loadTraining(agent.id);
   const system = composeSystemPrompt(agent, profile, sources);
-  const raw = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`) });
+  const raw = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`, channelLabel(agent.channelType)) });
   const { reason, clean } = extractAlert(raw);
   return { draft: applyLinks(clean, sources), urgentReason: reason };
 }
@@ -195,7 +201,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   let draft: string;
   let model!: Awaited<ReturnType<typeof generate>>;
   try {
-    model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`) });
+    model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
     draft = model.text;
   } catch (e: any) {
     console.error('Claude error:', e?.message || e);
