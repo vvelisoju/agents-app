@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { requirePermission } from '../../middleware/authz';
-import { listRuns, getRun, controlRun, type ControlAction } from './service';
+import { listRuns, getRun, controlRun, spineMetrics, type ControlAction } from './service';
 
 const router = Router();
 const u = (req: any) => req.user;
@@ -16,6 +16,11 @@ router.get('/', asyncHandler(async (req, res) => {
     limit: req.query.limit ? Math.min(500, Number(req.query.limit)) : undefined,
   });
   res.json({ runs });
+}));
+
+// GET /api/workflows/metrics — spine queue/DLQ/run metrics (must precede /:runId).
+router.get('/metrics', asyncHandler(async (req, res) => {
+  res.json(await spineMetrics(u(req).orgId));
 }));
 
 // GET /api/workflows/:runId — run + ordered step timeline (cross-tenant → 404).

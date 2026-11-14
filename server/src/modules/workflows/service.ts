@@ -21,6 +21,28 @@ export interface ControlResult {
   status?: string;
 }
 
+// EWS-22 — spine metrics (org-scoped): queue depth, DLQ, run-outcome breakdown.
+export async function spineMetrics(orgId: string) {
+  const [jobsByStatus, runsByStatus, dueBacklog] = await Promise.all([
+    prisma.job.groupBy({ by: ['status'], where: { orgId }, _count: { _all: true } }),
+    prisma.workflowRun.groupBy({ by: ['status'], where: { orgId }, _count: { _all: true } }),
+    prisma.job.count({ where: { orgId, status: 'pending', nextRunAt: { lte: new Date() } } }),
+  ]);
+  const jobs: Record<string, number> = {};
+  for (const r of jobsByStatus) jobs[r.status] = r._count._all;
+  const runs: Record<string, number> = {};
+  for (const r of runsByStatus) runs[r.status] = r._count._all;
+  return {
+    queueDepth: jobs.pending || 0,
+    leased: jobs.leased || 0,
+    running: jobs.running || 0,
+    dlq: jobs.dead || 0,
+    dueBacklog,
+    jobsByStatus: jobs,
+    runsByStatus: runs,
+  };
+}
+
 export function listRuns(orgId: string, opts: { agentId?: string; status?: string; limit?: number } = {}) {
   return prisma.workflowRun.findMany({
     where: { orgId, ...(opts.agentId ? { agentId: opts.agentId } : {}), ...(opts.status ? { status: opts.status } : {}) },
