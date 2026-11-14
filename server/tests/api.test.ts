@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { buildApp } from '../src/app';
+import { widgetKey } from '../src/lib/widgetKey';
 
 const app = buildApp();
 
@@ -186,10 +187,11 @@ describe('API integration', () => {
       autoSend: true, awayMessage: 'We are closed now, back soon.', hoursStart: (h + 2) % 24, hoursEnd: (h + 3) % 24, timezone: 'Asia/Kolkata',
     });
     const cid = 'v' + Date.now();
-    const r1 = await request(app).post(`/api/public/widget/${a.body.id}/message`).send({ contactId: cid, text: 'Hello?' });
+    const key = widgetKey(a.body.id);
+    const r1 = await request(app).post(`/api/public/widget/${a.body.id}/message?key=${key}`).send({ contactId: cid, text: 'Hello?' });
     expect(r1.body.status).toBe('away');
     expect(r1.body.reply).toContain('closed');
-    const r2 = await request(app).post(`/api/public/widget/${a.body.id}/message`).send({ contactId: cid, text: 'Still there?' });
+    const r2 = await request(app).post(`/api/public/widget/${a.body.id}/message?key=${key}`).send({ contactId: cid, text: 'Still there?' });
     expect(r2.body.status).toBe('ignored'); // no spam
   });
 });

@@ -1,4 +1,4 @@
-# Full stack: Postgres + Redis + Express API (server/) + React SPA (client/).
+# Full stack: Postgres + Express API (server/) + React SPA (client/).
 #
 # Quick start:
 #   cp server/.env.production.example server/.env.production
@@ -20,11 +20,6 @@ services:
     # Only expose locally — not needed outside this compose network.
     expose: ['5432']
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    expose: ['6379']
-
   server:
     build: ./server
     restart: unless-stopped
@@ -35,7 +30,7 @@ services:
       # DATABASE_URL: 'postgresql://postgres:agents@postgres:5432/agents'
     # Expose 4001 only for local debugging; nginx proxies /api internally.
     ports: ['127.0.0.1:4001:4000']
-    depends_on: [postgres, redis]
+    depends_on: [postgres]
     volumes:
       # Persist WhatsApp sessions across redeploys so agents stay connected.
       - wa_auth:/app/.wwebjs_auth

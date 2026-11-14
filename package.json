@@ -3,16 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
-  "description": "A personal hub for small, local automation agents (WhatsApp reply assistant and more).",
+  "description": "Personal Agent Platform. Live product: server/ (API) + client/ (web). legacy/ holds the archived prototype + skeleton.",
   "scripts": {
-    "whatsapp": "node agents/whatsapp-reply/index.js",
+    "whatsapp": "node legacy/agents/whatsapp-reply/index.js",
     "setup-browser": "npx puppeteer browsers install chrome",
     "postinstall": "npx puppeteer browsers install chrome"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
-    "dotenv": "latest",
-    "qrcode-terminal": "latest",
-    "whatsapp-web.js": "latest"
+    "@anthropic-ai/sdk": "1.8.0",
+    "dotenv": "18.0.10",
+    "qrcode-terminal": "0.12.0",
+    "whatsapp-web.js": "1.34.8"
   }
 }

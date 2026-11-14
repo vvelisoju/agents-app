@@ -11,6 +11,12 @@ import { StatusPill } from '@/components/StatusPill';
 import { TrainingPanel } from '@/components/agent/TrainingPanel';
 import { TestPanel } from '@/components/agent/TestPanel';
 import { ChatsPanel } from '@/components/agent/ChatsPanel';
+import { VersionsPanel } from '@/components/agent/VersionsPanel';
+import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
+import { CampaignsPanel } from '@/components/agent/CampaignsPanel';
+import { AbilitiesPanel } from '@/components/agent/AbilitiesPanel';
+import { ActivityPanel } from '@/components/agent/ActivityPanel';
+import { BookingsPanel } from '@/components/agent/BookingsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -27,6 +33,9 @@ export function AgentDetail({ id }: { id: string }) {
   const { data: agent } = useQuery<any>({ queryKey: agentKey });
   const { data: training } = useQuery<any>({ queryKey: ['/api/agents/' + id + '/training'] });
   const { data: me } = useQuery<any>({ queryKey: ['/api/me'] });
+  const { data: config } = useQuery<any>({ queryKey: ['/api/config'] });
+  const { data: toolsData } = useQuery<any>({ queryKey: ['/api/agents/' + id + '/tools'] });
+  const canBook = !!toolsData?.tools?.find((t: any) => t.name === 'calendar.book' && t.enabled);
   const [tab, setTab] = React.useState('train');
   const [setupDone, setSetupDone] = React.useState(() => readDone(id));
 
@@ -101,10 +110,28 @@ export function AgentDetail({ id }: { id: string }) {
         </div>
 
         <div className="space-y-4">
-          <Tabs tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }]} value={tab} onChange={setTab} />
+          <Tabs
+            tabs={[
+              { id: 'train', label: 'Train' },
+              { id: 'abilities', label: 'Abilities' },
+              { id: 'test', label: 'Test' },
+              { id: 'chats', label: 'Chats' },
+              ...(canBook ? [{ id: 'bookings', label: 'Bookings' }] : []),
+              ...(config?.features?.monitor ? [{ id: 'monitors', label: 'Monitors' }] : []),
+              ...(config?.features?.outbound ? [{ id: 'campaigns', label: 'Campaigns' }] : []),
+              { id: 'versions', label: 'Versions' },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
           {tab === 'train' && <TrainingPanel id={id} />}
+          {tab === 'abilities' && <div className="space-y-4"><AbilitiesPanel id={id} /><ActivityPanel id={id} /></div>}
+          {tab === 'bookings' && canBook && <BookingsPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
+          {tab === 'monitors' && config?.features?.monitor && <MonitorsPanel id={id} />}
+          {tab === 'campaigns' && config?.features?.outbound && <CampaignsPanel id={id} />}
+          {tab === 'versions' && <VersionsPanel id={id} />}
         </div>
       </div>
     </div>

@@ -8,4 +8,4 @@ export async function send(_agentId: string, _to: string, _text: string) {
   // outbound 'sent' messages (auto-send replies and approved drafts alike).
 }
 
-register({ type: 'website', onboarding: 'embed', send });
+register({ type: 'website', onboarding: 'embed', label: 'Website', blurb: 'A chat widget on your site', ready: true, capabilities: ['text'], send });

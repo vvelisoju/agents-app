@@ -111,4 +111,4 @@ export function restoreSessions(ids: string[]) {
 }
 
 // Register this channel.
-register({ type: 'whatsapp-web', onboarding: 'qr', start: startSession, stop: stopSession, send: sendText });
+register({ type: 'whatsapp-web', onboarding: 'qr', label: 'WhatsApp', blurb: 'Reply to WhatsApp customers', ready: true, capabilities: ['text', 'images'], start: startSession, stop: stopSession, send: sendText });

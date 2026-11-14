@@ -1,13 +1,27 @@
 // The reply engine — fully channel-agnostic. Adapters hand it a normalised
 // InboundMessage; it loads the agent's CURRENT training, asks Claude, then
 // either delivers via the channel adapter (auto-send) or saves a draft.
+import crypto from 'node:crypto';
 import prisma from '../lib/prisma';
-import { askClaude } from '../lib/brain';
+import { askClaude, generate } from '../lib/brain';
+import { writeTrace } from '../lib/trace';
+import { canSpend } from '../lib/budget';
 import { composeSystemPrompt, applyLinks, extractAlert, Source } from '../lib/training';
 import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
 import { getAdapter } from '../channels/registry';
 import { InboundMessage } from '../channels/types';
+import { outboundEnabled, memoryEnabled } from '../lib/spineEnv';
+import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
+import { withSendLock } from '../lib/sendMutex';
+import { recallMemory, rememberFacts, extractMemory, memoryBlock } from '../lib/memory';
+import { runAgenticLoop } from './agentic';
+
+// TOOL-14: an agent's enabled tool allowlist (JSON string[]), empty by default.
+function parseEnabledTools(agent: any): string[] {
+  try { const a = JSON.parse(agent.enabledToolsJson || '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []; }
+  catch { return []; }
+}
 
 // Don't re-ping the owner about the same lead more than once per this window.
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -60,12 +74,18 @@ function worthReplying(body: string): boolean {
   return !ACKS.has(t);
 }
 
-function buildPrompt(convoText: string): string {
+// SCN-01: channel label defaults to "WhatsApp" so existing WhatsApp prompts are byte-identical.
+function buildPrompt(convoText: string, channel = 'WhatsApp'): string {
   return (
-    `Here is the recent WhatsApp conversation with a customer:\n\n${convoText}\n\n` +
+    `Here is the recent ${channel} conversation with a customer:\n\n${convoText}\n\n` +
     `Write the business's next reply to the customer's most recent message. ` +
     `Reply with ONLY the message text to send, nothing else.`
   );
+}
+
+// The channel display name for prompts, from the adapter (falls back to WhatsApp).
+function channelLabel(channelType: string): string {
+  return getAdapter(channelType)?.label || 'WhatsApp';
 }
 
 async function loadTraining(agentId: string): Promise<{ profile: any; sources: Source[] }> {
@@ -81,13 +101,13 @@ async function loadTraining(agentId: string): Promise<{ profile: any; sources: S
 export async function draftFor(agent: any, message: string): Promise<{ draft: string; urgentReason: string | null }> {
   const { profile, sources } = await loadTraining(agent.id);
   const system = composeSystemPrompt(agent, profile, sources);
-  const raw = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`) });
+  const raw = await askClaude({ system, prompt: buildPrompt(`Customer: ${message}`, channelLabel(agent.channelType)) });
   const { reason, clean } = extractAlert(raw);
   return { draft: applyLinks(clean, sources), urgentReason: reason };
 }
 
 export interface ProcessResult {
-  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away';
+  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away' | 'budget_exceeded' | 'opted_out';
   reply?: string;
   conversationId?: string;
 }
@@ -100,13 +120,35 @@ function currentHourInTz(tz: string): number {
   } catch { return new Date().getHours(); }
 }
 
-// Handle one normalised inbound message from any channel.
-export async function processInbound(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
+// FND-30: per-conversation serialization lock. Two messages from the SAME contact
+// (e.g. a rapid double-send, or Telegram's fire-and-forget handler) must not run
+// concurrently — otherwise each loads the same history and the agent double-replies.
+// Keyed by agent+contact so different conversations still run in parallel. The chain
+// is deleted once it drains, so the map never grows unbounded. Single-process only;
+// a horizontal move must swap this for a Postgres advisory lock (see QA-59).
+const convChains = new Map<string, Promise<unknown>>();
+
+function withConversationLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = convChains.get(key) ?? Promise.resolve();
+  const result = prev.then(fn, fn); // run after the previous one settles, pass or fail
+  const guarded = result.then(() => {}, () => {});
+  convChains.set(key, guarded);
+  guarded.then(() => { if (convChains.get(key) === guarded) convChains.delete(key); });
+  return result;
+}
+
+// Handle one normalised inbound message from any channel. Serialized per conversation.
+export function processInbound(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
+  return withConversationLock(`${agentId}:${inbound.from}`, () => processInboundLocked(agentId, inbound));
+}
+
+async function processInboundLocked(agentId: string, inbound: InboundMessage): Promise<ProcessResult> {
   const text = (inbound.text || '').trim();
   if (!worthReplying(text)) return { status: 'ignored' };
 
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
   if (!agent) return { status: 'no_agent' };
+  const executionId = crypto.randomUUID();
 
   const contactName = inbound.contactName || inbound.from.split('@')[0];
   const conv = await prisma.conversation.upsert({
@@ -114,8 +156,20 @@ export async function processInbound(agentId: string, inbound: InboundMessage): 
     update: { lastMessageAt: new Date(), contactName },
     create: { agentId, orgId: agent.orgId, contactNumber: inbound.from, contactName },
   });
-  await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'inbound', body: text, status: 'received' } });
+  await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'inbound', body: text, status: 'received' } });
   realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'received' });
+
+  // SCN-10: outbound STOP/unsubscribe opt-out. Gated by OUTBOUND_ENABLED (off → byte-for-byte
+  // today). A match suppresses the contact (the drip skips it), sends ONE neutral confirmation,
+  // and does NOT AI-reply. Any other message flows to the agent exactly as before.
+  if (outboundEnabled() && isOptOutMessage(text)) {
+    await suppressContact(agent.orgId, agentId, inbound.from);
+    const adapter = getAdapter(agent.channelType);
+    try { if (adapter) await withSendLock(agentId, () => adapter.send(agentId, inbound.from, OPT_OUT_CONFIRMATION)); } catch { /* confirmation is best-effort */ }
+    await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: OPT_OUT_CONFIRMATION, status: 'opted_out' } });
+    realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'opted_out' });
+    return { status: 'opted_out', conversationId: conv.id };
+  }
 
   // Respect agent pause, per-conversation human takeover, and mute: still log the
   // inbound (owner sees it), but the AI does not reply.
@@ -133,29 +187,64 @@ export async function processInbound(agentId: string, inbound: InboundMessage): 
       if (lastOut?.status === 'away') return { status: 'ignored', conversationId: conv.id };
       const adapter = getAdapter(agent.channelType);
       try { if (adapter) await adapter.send(agentId, inbound.from, agent.awayMessage); } catch { /* ignore */ }
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: agent.awayMessage, status: 'away' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: agent.awayMessage, status: 'away' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'away' });
       return { status: 'away', reply: agent.awayMessage, conversationId: conv.id };
     }
   }
 
+  // MGW-10/11: per-tenant daily budget. Every channel (incl. the public widget) funnels
+  // through here, so one check caps model spend across all of them.
+  const spend = await canSpend(agent.orgId);
+  if (!spend.allowed) {
+    writeTrace({ orgId: agent.orgId, agentId, executionId, conversationId: conv.id, outcome: 'budget_exceeded' });
+    return { status: 'budget_exceeded', conversationId: conv.id };
+  }
+
   const { profile, sources } = await loadTraining(agentId);
   const system = composeSystemPrompt(agent, profile, sources);
+  // MK-9: recall per-contact memory and prepend it to the prompt. Gated by MEMORY_ENABLED and a
+  // no-op when there is nothing remembered, so the reply is byte-for-byte today's when off.
+  let systemForTurn = system;
+  if (memoryEnabled()) {
+    const block = memoryBlock(await recallMemory(agentId, inbound.from));
+    if (block) systemForTurn = `${system}\n\n${block}`;
+  }
   const history = (await prisma.message.findMany({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' }, take: 8 }))
     .reverse().map((m) => `${m.direction === 'outbound' ? 'Me (business)' : 'Customer'}: ${m.body}`).join('\n');
 
   let draft: string;
+  let model!: Awaited<ReturnType<typeof generate>>;
+  // TOOL-05/14: the agentic tool loop is a sibling path, taken ONLY when the owner put the agent
+  // in 'agentic' mode AND enabled at least one tool. Otherwise this is byte-for-byte the single
+  // Haiku call. The deterministic post-processing below (NEEDS_HUMAN / [[ALERT]] / {{LINK}}) is
+  // identical for both paths (TOOL-06).
+  const enabledTools = parseEnabledTools(agent);
+  const agentic = agent.executionMode === 'agentic' && enabledTools.length > 0;
   try {
-    draft = await askClaude({ system, prompt: buildPrompt(history || `Customer: ${text}`) });
+    if (agentic) {
+      const r = await runAgenticLoop({
+        system: systemForTurn,
+        userText: history || `Customer: ${text}`,
+        enabledTools,
+        ctx: { agent, orgId: agent.orgId, conversationId: conv.id, executionId },
+      });
+      draft = r.text;
+      model = { text: r.text, model: r.model, provider: r.provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, latencyMs: 0, stopReason: 'end_turn', refused: false };
+    } else {
+      model = await generate({ system: systemForTurn, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
+      draft = model.text;
+    }
   } catch (e: any) {
     console.error('Claude error:', e?.message || e);
+    writeTrace({ orgId: agent.orgId, agentId, executionId, conversationId: conv.id, outcome: 'error', errorCode: 'model_error' });
     return { status: 'error', conversationId: conv.id };
   }
   if (!draft) return { status: 'empty', conversationId: conv.id };
 
   const esc = profile?.escalationKeyword || 'NEEDS_HUMAN';
   if (draft.includes(esc)) {
-    await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: '[needs a human]', status: 'needs_human' } });
+    await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: '[needs a human]', status: 'needs_human' } });
     realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'needs_human' });
     return { status: 'needs_human', conversationId: conv.id };
   }
@@ -163,26 +252,40 @@ export async function processInbound(agentId: string, inbound: InboundMessage): 
   // Pull out any urgent-lead signal and strip it from the customer-facing reply.
   const { reason: urgentReason, clean } = extractAlert(draft);
   if (urgentReason) { await alertOwner(agent, conv, inbound, urgentReason); }
-  draft = applyLinks(clean, sources);
-  if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert line
-  await prisma.usageEvent.create({ data: { orgId: agent.orgId, agentId } });
+  // MK-9: store any [[REMEMBER:k=v]] facts the model emitted and strip them from the reply (gated).
+  let afterMemory = clean;
+  if (memoryEnabled()) {
+    const mem = extractMemory(clean);
+    if (mem.memories.length) await rememberFacts(agent.orgId, agentId, inbound.from, mem.memories);
+    afterMemory = mem.clean;
+  }
+  draft = applyLinks(afterMemory, sources);
+  if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert/memory line
+  // OBS-1: one execution-trace row per produced reply (enriched UsageEvent).
+  writeTrace({
+    orgId: agent.orgId, agentId, executionId, conversationId: conv.id,
+    outcome: agent.autoSend ? 'sent' : 'draft',
+    approvalState: agent.autoSend ? 'auto' : 'draft',
+    model: model.model, provider: model.provider,
+    inputTokens: model.inputTokens, outputTokens: model.outputTokens, latencyMs: model.latencyMs,
+  });
 
   if (agent.autoSend) {
     const adapter = getAdapter(agent.channelType);
     try {
       if (adapter) await adapter.send(agentId, inbound.from, draft);
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'sent' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'sent' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'sent' });
       return { status: 'sent', reply: draft, conversationId: conv.id };
     } catch (e: any) {
       console.error('send failed:', e?.message || e);
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'draft' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'draft' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'draft' });
       return { status: 'draft', reply: draft, conversationId: conv.id };
     }
   }
 
-  await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'draft' } });
+  await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'draft' } });
   realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'draft' });
   return { status: 'draft', reply: draft, conversationId: conv.id };
 }

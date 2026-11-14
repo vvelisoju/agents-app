@@ -1,0 +1,71 @@
+# CI (FND-47 / QA-11). One workflow; later tasks add jobs (migration-diff guard QA-12,
+# secret-scan QA-14, coverage gate QA-50, locked-decision guard QA-58, …).
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test # includes the money/safety suite (FND-40) on an isolated SQLite DB (QA-01)
+
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # QA-15: builds must be deterministic — no "latest" dependency specifiers.
+      - name: No unpinned 'latest' dependencies
+        run: |
+          if grep -REn '"[^"]+":[[:space:]]*"latest"' server/package.json client/package.json package.json; then
+            echo "::error::Unpinned 'latest' dependency found — pin to an exact version."
+            exit 1
+          fi
+          echo "All dependencies are pinned."
+      # QA-12: the prod boot path must never run a destructive schema sync.
+      - name: No destructive schema sync on the prod path
+        run: |
+          if grep -REn 'accept-data-loss|force-reset|db push' server/docker-entrypoint.sh server/Dockerfile; then
+            echo "::error::Destructive schema op on the prod path — use prisma migrate deploy."
+            exit 1
+          fi
+          echo "Prod path uses migrate deploy only."
+      # DB-5: the generated Postgres schema must stay in sync with schema.prisma.
+      - name: Postgres schema in sync
+        working-directory: server
+        run: |
+          node scripts/gen-pg-schema.js
+          git diff --exit-code prisma/schema.postgres.prisma || {
+            echo "::error::prisma/schema.postgres.prisma is stale — run npm run db:gen-pg and commit."
+            exit 1
+          }

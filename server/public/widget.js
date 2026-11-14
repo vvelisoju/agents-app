@@ -1,8 +1,9 @@
 /* Secure Agents — embeddable website chat widget.
-   Usage: <script src="https://YOUR_SERVER/widget.js" data-agent="AGENT_ID"></script> */
+   Usage: <script src="https://YOUR_SERVER/widget.js" data-agent="AGENT_ID" data-key="WIDGET_KEY"></script> */
 (function () {
   var script = document.currentScript;
   var agentId = script && script.getAttribute('data-agent');
+  var key = (script && script.getAttribute('data-key')) || '';
   if (!agentId) return;
   var base = new URL(script.src).origin;
   var CID = 'sa_widget_cid_' + agentId;
@@ -44,7 +45,7 @@
     var text = input.value.trim(); if (!text) return;
     input.value = ''; add(text, 'me');
     try {
-      var r = await fetch(base + '/api/public/widget/' + agentId + '/message', {
+      var r = await fetch(base + '/api/public/widget/' + agentId + '/message?key=' + encodeURIComponent(key), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contactId: cid, name: 'Website visitor', text: text }),
       });
@@ -57,7 +58,7 @@
 
   async function poll() {
     try {
-      var url = base + '/api/public/widget/' + agentId + '/messages?contactId=' + encodeURIComponent(cid) + (lastAt ? '&after=' + encodeURIComponent(lastAt) : '');
+      var url = base + '/api/public/widget/' + agentId + '/messages?contactId=' + encodeURIComponent(cid) + '&key=' + encodeURIComponent(key) + (lastAt ? '&after=' + encodeURIComponent(lastAt) : '');
       var r = await fetch(url); var j = await r.json();
       (j.messages || []).forEach(function (m) { add(m.body, 'them'); lastAt = m.at; });
     } catch (e) {}

@@ -7,6 +7,7 @@ import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { PLANS, getPlan } from '../../lib/plans';
 import { configured, createOrder, verifyPaymentSignature } from '../../lib/razorpay';
+import { applyPlan } from '../../lib/subscription';
 
 const router = Router();
 const u = (req: any) => req.user;
@@ -18,20 +19,15 @@ router.get('/subscription', asyncHandler(async (req, res) => {
   res.json({ ...sub, razorpayConfigured: configured() });
 }));
 
-async function applyPlan(orgId: string, planId: string) {
-  const plan = getPlan(planId);
-  if (!plan) return null;
-  return prisma.subscription.update({ where: { orgId }, data: { plan: plan.id, maxAgents: plan.maxAgents, status: 'active' } });
-}
-
-// Create a Razorpay order for a paid plan.
+// Create a Razorpay order for a paid plan. orgId + planId go in the order notes so the
+// webhook (FND-20) can apply the plan server-authoritatively.
 router.post('/checkout', asyncHandler(async (req, res) => {
   if (u(req).role !== 'owner') return res.status(403).json({ error: 'only the owner can upgrade', code: 'forbidden' });
   if (!configured()) return res.status(400).json({ error: 'billing is not configured', code: 'billing_unconfigured' });
   const plan = getPlan(String(req.body?.planId));
   if (!plan || plan.priceInr <= 0) return res.status(400).json({ error: 'pick a paid plan' });
   const receipt = `o_${u(req).orgId.slice(0, 8)}_${plan.id}_${Date.now()}`.slice(0, 40);
-  const order = await createOrder(plan.priceInr * 100, receipt);
+  const order = await createOrder(plan.priceInr * 100, receipt, { orgId: u(req).orgId, planId: plan.id });
   res.json({ orderId: order.id, amount: order.amount, currency: order.currency, keyId: process.env.RAZORPAY_KEY_ID, planId: plan.id });
 }));
 
@@ -50,7 +46,9 @@ router.post('/verify', asyncHandler(async (req, res) => {
 // Dev/admin direct apply (no payment) — blocked in production when Razorpay is live.
 router.post('/subscribe', asyncHandler(async (req, res) => {
   if (u(req).role !== 'owner') return res.status(403).json({ error: 'only the owner can change the plan', code: 'forbidden' });
-  if (process.env.NODE_ENV === 'production' && configured()) {
+  // FND-21: never allow a free plan upgrade in production — even if Razorpay is not
+  // configured (previously this gap let a misconfigured prod self-upgrade to any plan).
+  if (process.env.NODE_ENV === 'production') {
     return res.status(400).json({ error: 'use /checkout to pay', code: 'payment_required' });
   }
   const sub = await applyPlan(u(req).orgId, String(req.body?.planId));

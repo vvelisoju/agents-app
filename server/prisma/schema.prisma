@@ -19,14 +19,17 @@ model Org {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  orgId        String
-  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  phone        String   @unique // normalized 10-digit local mobile (digits only)
-  passwordHash String
-  token        String   @unique
-  role         String   @default("owner")
-  createdAt    DateTime @default(now())
+  id             String    @id @default(uuid())
+  orgId          String
+  org            Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  phone          String    @unique // normalized 10-digit local mobile (digits only)
+  passwordHash   String
+  token          String    @unique
+  tokenHash      String?   @unique // SEC-4: hashed bearer token (replaces plaintext lookups)
+  tokenExpiresAt DateTime? // SEC-5: token expiry
+  lastLoginAt    DateTime?
+  role           String    @default("owner")
+  createdAt      DateTime  @default(now())
 }
 
 // One-time codes for WhatsApp OTP (signup + password reset). Code is bcrypt-hashed.
@@ -55,46 +58,73 @@ model Subscription {
 }
 
 model Agent {
-  id            String           @id @default(uuid())
-  orgId         String
-  org           Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name          String
-  channelType   String           @default("whatsapp-web")
-  status        String           @default("draft")
-  autoSend      Boolean          @default(false)
-  paused        Boolean          @default(false)
-  awayMessage   String?
-  hoursStart    Int?
-  hoursEnd      Int?
-  timezone      String           @default("Asia/Kolkata")
+  id               String           @id @default(uuid())
+  orgId            String
+  org              Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name             String
+  channelType      String           @default("whatsapp-web")
+  status           String           @default("draft")
+  autoSend         Boolean          @default(false)
+  executionMode    String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop)
+  enabledToolsJson String? // TOOL-14: JSON string[] of enabled tool names; null/[] = no tools (reply stays byte-for-byte)
+  currentVersionId String? // SPEC: active AgentVersion pointer; null = live-edit mode (default)
+  lifecycleStatus  String           @default("draft") // SPEC: draft | active | paused | archived (NOT connection status)
+  paused           Boolean          @default(false)
+  awayMessage      String?
+  hoursStart       Int?
+  hoursEnd         Int?
+  timezone         String           @default("Asia/Kolkata")
   // Owner alerts: the agent WhatsApps the owner at this number (digits only) when
   // a conversation matches `alertCondition`. Null/empty number = alerts off.
   // Delivered via the agent's own channel session.
-  alertNumber   String?
+  alertNumber      String?
   // When to alert, in the OWNER'S OWN WORDS (free text, business-specific). Blank
   // falls back to a sensible default. This is what makes alerting generic — every
   // business decides its own trigger (urgent lead, complaint, bulk order, VIP, …).
-  alertCondition String?
-  channelConfig String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
-  createdAt     DateTime         @default(now())
-  profile       TrainingProfile?
-  sources       TrainingSource[]
-  conversations Conversation[]
-  session       ChannelSession?
+  alertCondition   String?
+  channelConfig    String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
+  createdAt        DateTime         @default(now())
+  profile          TrainingProfile?
+  sources          TrainingSource[]
+  conversations    Conversation[]
+  session          ChannelSession?
+  versions         AgentVersion[]
+}
+
+// SPEC-1 — immutable published snapshots of an agent's full config (the AgentSpec JSON),
+// for version history + one-click rollback. currentVersionId on Agent points at the active
+// one; null means live-edit (reads TrainingProfile/TrainingSource directly — the default).
+model AgentVersion {
+  id              String   @id @default(uuid())
+  agentId         String
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  version         Int
+  specJson        String
+  status          String   @default("published")
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  @@unique([agentId, version])
+  @@index([agentId])
 }
 
 model ChannelSession {
   id              String    @id @default(uuid())
+  orgId           String? // DB-7: direct tenant scoping (backfilled; populated at write time)
   agentId         String    @unique
   agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   status          String    @default("pending_qr")
   phoneNumber     String?
   lastConnectedAt DateTime?
   updatedAt       DateTime  @updatedAt
+
+  @@index([orgId])
 }
 
 model TrainingProfile {
   id                String   @id @default(uuid())
+  orgId             String? // DB-8: direct tenant scoping
   agentId           String   @unique
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   instructions      String   @default("")
@@ -103,16 +133,21 @@ model TrainingProfile {
   language          String   @default("match the customer")
   escalationKeyword String   @default("NEEDS_HUMAN")
   updatedAt         DateTime @updatedAt
+
+  @@index([orgId])
 }
 
 model TrainingSource {
   id        String   @id @default(uuid())
+  orgId     String? // DB-9: direct tenant scoping
   agentId   String
   agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   type      String // 'fact' | 'link' | 'faq'
   dataJson  String // JSON: {content} | {name,url} | {question,answer}
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  @@index([orgId])
 }
 
 model Conversation {
@@ -137,6 +172,7 @@ model Conversation {
 
 model Message {
   id             String       @id @default(uuid())
+  orgId          String? // DB-10: direct tenant scoping (highest-growth table)
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   agentId        String
@@ -144,6 +180,9 @@ model Message {
   body           String
   status         String // received | draft | sent | skipped | needs_human
   createdAt      DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([conversationId, createdAt]) // DB-11: history reads on the highest-growth table
 }
 
 model UsageEvent {
@@ -152,4 +191,305 @@ model UsageEvent {
   agentId   String
   type      String   @default("reply")
   createdAt DateTime @default(now())
+
+  // OBS-1 / MGW-4: execution-trace fields (nullable, additive). Populated on the produced
+  // reply with model/token/cost/latency/outcome so a reply is traceable end-to-end.
+  executionId    String?
+  model          String?
+  provider       String?
+  inputTokens    Int?
+  outputTokens   Int?
+  costMicros     Int?
+  latencyMs      Int?
+  outcome        String? // sent | draft | needs_human | away | error | ignored
+  trigger        String? // channel-event | cron | webhook
+  conversationId String?
+  agentVersion   String?
+  errorCode      String?
+  approvalState  String? // auto | draft | approved | skipped
+
+  @@index([orgId, createdAt]) // DB-12: analytics aggregation
+}
+
+// TOOL-29 — per-tool-call step trace for the agentic path. One row per tool invocation, keyed
+// to the run's executionId (the Phase-2 UsageEvent trace is one row per run, with no per-step
+// field). Reply-mode runs write zero rows. Input is stored redacted; secrets never land here.
+model ExecutionStep {
+  id            String   @id @default(uuid())
+  orgId         String
+  agentId       String
+  executionId   String
+  stepIndex     Int
+  toolName      String
+  inputJson     String   @default("{}") // redacted
+  outcome       String // ok | invalid_input | invalid_output | timeout | denied | pending_approval | error
+  approvalState String? // inline | pending_approval | pre_approved
+  latencyMs     Int?
+  createdAt     DateTime @default(now())
+
+  @@index([executionId, stepIndex])
+  @@index([orgId, createdAt])
+}
+
+// POL-06 — generalized approval queue. Message.status='draft' (approve-before-send) is
+// the first instance; bulk send / booking / delete / financial become additional rows.
+model Approval {
+  id              String    @id @default(uuid())
+  orgId           String
+  agentId         String?
+  actionType      String // send_reply | bulk_send | booking | delete | financial | social_publish
+  payloadJson     String    @default("{}")
+  status          String    @default("pending") // pending | approved | rejected | expired | executed
+  requestedBy     String?
+  decidedByUserId String?
+  decidedAt       DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([orgId, status])
+}
+
+// POL-12 — append-only audit trail of security-relevant actions.
+model AuditLog {
+  id           String   @id @default(uuid())
+  orgId        String
+  actorType    String   @default("user") // user | system | agent
+  actorUserId  String?
+  action       String
+  targetType   String?
+  targetId     String?
+  metadataJson String?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([orgId, createdAt])
+}
+
+// SEC-7 — encrypted external credentials (channel tokens, OAuth). AES-256-GCM blob.
+model ConnectedAccount {
+  id        String    @id @default(uuid())
+  orgId     String
+  agentId   String?
+  provider  String // telegram | meta | google | ...
+  encBlob   String // lib/crypto.ts ciphertext
+  keyId     String?
+  scopes    String?
+  status    String    @default("active")
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}
+
+// ─── Phase 5: Event / Trigger / Workflow spine (all gated behind WORKFLOW_ENABLED) ───
+
+// EWS-01 — transactional outbox (CloudEvents field-shape). NOT a broker: a dispatcher
+// drains unprocessed rows and matches them to Triggers. Written fire-and-forget.
+model DomainEvent {
+  id             String    @id @default(uuid())
+  orgId          String
+  source         String // e.g. "engine" | "billing" | "lead"
+  type           String // e.g. "message.received" | "lead.created" | "billing.payment"
+  subject        String?
+  dataJson       String    @default("{}")
+  idempotencyKey String?   @unique
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([processedAt])
+  @@index([orgId, type])
+}
+
+// EWS-02 — binds a source signal (event | cron | webhook) to a registered workflow handler.
+model Trigger {
+  id          String    @id @default(uuid())
+  orgId       String
+  agentId     String?
+  kind        String // event | cron | webhook
+  eventType   String?
+  cronExpr    String?
+  filterJson  String    @default("{}")
+  handlerName String
+  enabled     Boolean   @default(true)
+  nextRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([enabled, kind])
+  @@index([eventType])
+}
+
+// EWS-03 — the runner's claimable unit of work. idempotencyKey @unique blocks double-enqueue;
+// lease/leaseUntil give single-owner execution and crash reclaim.
+model Job {
+  id             String    @id @default(uuid())
+  orgId          String
+  workflowRunId  String?
+  handlerName    String
+  status         String    @default("pending") // pending | leased | running | completed | failed | dead
+  nextRunAt      DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  stateJson      String    @default("{}")
+  lease          String?
+  leaseUntil     DateTime?
+  idempotencyKey String?   @unique
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([leaseUntil])
+  @@index([orgId])
+}
+
+// EWS-04 — a durable multi-step run + its append-only step history (reconstructable/replayable).
+model WorkflowRun {
+  id           String    @id @default(uuid())
+  orgId        String
+  agentId      String?
+  workflowName String
+  status       String    @default("running") // running | sleeping | awaiting_approval | paused | completed | failed | canceled
+  currentStep  String?
+  stateJson    String    @default("{}")
+  approvalId   String?
+  startedAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  finishedAt   DateTime?
+
+  steps WorkflowStepLog[]
+
+  @@index([orgId, status])
+  @@index([agentId])
+}
+
+model WorkflowStepLog {
+  id         String      @id @default(uuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepName   String
+  result     String // complete | retry | sleep | awaitApproval | fail
+  detailJson String      @default("{}")
+  createdAt  DateTime    @default(now())
+
+  @@index([runId, createdAt])
+}
+
+// MK-9 — per-contact memory: durable facts an agent learns about a contact (name, preference,
+// last order) and recalls across conversations. Written when the model emits [[REMEMBER:k=v]]
+// (parsed + stripped like [[ALERT]]); injected into the prompt on the next message. Gated by
+// MEMORY_ENABLED so the reply path is byte-for-byte today when off. Bounded by an optional TTL.
+model ContactMemory {
+  id            String    @id @default(uuid())
+  orgId         String
+  agentId       String
+  contactNumber String
+  key           String
+  value         String
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([agentId, contactNumber, key])
+  @@index([orgId])
+  @@index([agentId, contactNumber])
+}
+
+// SCN-27 — a scheduled website/offer/price monitor. The scheduled-monitor handler fetches
+// `url` (SSRF-guarded), extracts readable text, hashes it, and notifies on change. One Watch
+// owns one cron Trigger on the spine (triggerId) created/removed with it.
+model Watch {
+  id             String    @id @default(uuid())
+  orgId          String
+  agentId        String
+  url            String
+  label          String?
+  cronExpr       String    @default("0 * * * *") // default: hourly
+  notifyNumber   String? // owner number to ping; falls back to the agent's alert number
+  active         Boolean   @default(true)
+  triggerId      String? // the spine Trigger that drives this watch
+  lastHash       String?
+  lastSnapshot   String?
+  lastCheckedAt  DateTime?
+  lastChangedAt  DateTime?
+  lastChangeNote String?
+  createdAt      DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}
+
+// ─── SCN-05: Outbound QR drip (Trackly-model, whatsapp-web ONLY; gated by OUTBOUND_ENABLED) ───
+
+// A connection to a recipient source + its send policy. Token stored encrypted (AES-256-GCM).
+// A connection cannot activate without a persisted risk acknowledgement (accepted-risk design).
+model OutboundConnection {
+  id          String    @id @default(uuid())
+  orgId       String
+  agentId     String
+  provider    String    @default("trackly")
+  tokenEnc    String? // lib/crypto ciphertext — never logged
+  dailyCap    Int       @default(50)
+  windowStart Int       @default(10) // local hour, inclusive
+  windowEnd   Int       @default(18) // local hour, exclusive
+  minGapSec   Int       @default(240)
+  maxGapSec   Int       @default(420)
+  warmupDays  Int       @default(5)
+  warmupStart Int       @default(10) // day-1 effective cap, ramps to dailyCap over warmupDays
+  active      Boolean   @default(false)
+  riskAckAt   DateTime? // written when the owner accepts the ban-risk acknowledgement
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}
+
+// Send ledger — source of truth for the daily counter (survives restarts) and the idempotency
+// guard: a (connection, campaign, recipient) tuple can be sent at most once.
+model OutboundSendLog {
+  id                String   @id @default(uuid())
+  orgId             String
+  connectionId      String
+  campaignId        String   @default("")
+  recipient         String // normalized phone
+  status            String   @default("sent") // sent | delivered | read | failed | opted_out
+  providerMessageId String?
+  createdAt         DateTime @default(now())
+
+  @@unique([connectionId, campaignId, recipient])
+  @@index([orgId, createdAt])
+  @@index([connectionId, createdAt])
+}
+
+// SCN-20 — appointment booking. A confirmed booking holds a slot; the overlap guard (SCN-22)
+// rejects two confirmed bookings on the same agent at overlapping times.
+model Booking {
+  id             String   @id @default(uuid())
+  orgId          String
+  agentId        String
+  conversationId String?
+  contactNumber  String
+  contactName    String?
+  startAt        DateTime
+  endAt          DateTime
+  status         String   @default("confirmed") // draft | confirmed | cancelled
+  note           String?
+  externalRef    String? // dedupe/idempotency key (e.g. agentId+contact+slot) — unique
+  createdAt      DateTime @default(now())
+
+  @@unique([externalRef])
+  @@index([orgId])
+  @@index([agentId, startAt])
+}
+
+// STOP/unsubscribe suppression. A suppressed (agent, phone) is never sent to by the drip.
+model OutboundOptOut {
+  id        String   @id @default(uuid())
+  orgId     String
+  agentId   String
+  phone     String
+  createdAt DateTime @default(now())
+
+  @@unique([agentId, phone])
+  @@index([orgId])
 }

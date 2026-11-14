@@ -1,6 +1,7 @@
 // Turns an agent's training (profile + sources) into a system prompt, and swaps
 // {{LINK:Name}} tokens for the real URLs so shared links are always exact.
 // Ported verbatim from the skeleton (pure functions — channel-agnostic).
+import { getAdapter } from '../channels/registry';
 
 export interface Source {
   id: string;
@@ -41,8 +42,13 @@ export function composeSystemPrompt(agent: any, profile: any, sources: Source[])
   const faqs = on.filter((s) => s.type === 'faq').map((s) => `Q: ${s.data.question}\nA: ${s.data.answer}`);
   const links = on.filter((s) => s.type === 'link');
 
+  // SCN-01: the channel name comes from the adapter, so a website/telegram/… agent is described
+  // by its own channel. whatsapp-web's label is exactly "WhatsApp", so WhatsApp prompts stay
+  // byte-for-byte identical. Falls back to "WhatsApp" when the adapter has no label (e.g. tests).
+  const channel = getAdapter(agent.channelType)?.label || 'WhatsApp';
+
   const parts: string[] = [];
-  parts.push(`You are the friendly WhatsApp assistant for "${agent.name}". You reply to people who message the business on WhatsApp.`);
+  parts.push(`You are the friendly ${channel} assistant for "${agent.name}". You reply to people who message the business on ${channel}.`);
 
   if (profile?.instructions?.trim()) parts.push(`INSTRUCTIONS:\n${profile.instructions.trim()}`);
   if (profile?.restrictions?.trim()) parts.push(`RESTRICTIONS (never break these):\n${profile.restrictions.trim()}`);
@@ -59,7 +65,7 @@ export function composeSystemPrompt(agent: any, profile: any, sources: Source[])
 
   parts.push(
     `HOW TO REPLY:\n` +
-    `- Tone: ${profile?.tone || 'warm, concise, helpful'}. Keep it short (1-4 lines), this is WhatsApp.\n` +
+    `- Tone: ${profile?.tone || 'warm, concise, helpful'}. Keep it short (1-4 lines), this is ${channel}.\n` +
     `- Language: ${profile?.language || 'match the customer'}.\n` +
     `- Answer using only the facts above. Never invent prices, offers or facts you were not given.\n` +
     `- If you do not know something, say you will check or ask them to contact the team.`,

@@ -5,9 +5,16 @@ import http from 'http';
 import prisma from './lib/prisma';
 import { buildApp } from './app';
 import { attachWs } from './lib/realtime';
+import { assertProdSecrets } from './lib/env';
 import './channels/whatsapp'; // register the WhatsApp adapter
 import * as wa from './channels/whatsapp';
+import { startSpine, stopSpine } from './jobs/spine'; // EWS-14: Phase-5 spine (gated by WORKFLOW_ENABLED)
+import './workflow/handlers'; // register built-in workflow handlers (scheduled-monitor, …)
+import './lib/retention'; // EWS-33/OBS-18/POL-17: register retention sweeps on the shared ticker
+import { startMaintenance, stopMaintenance } from './lib/maintenance'; // EWS-34 (always-on, ungated)
+import './tools/builtin'; // TOOL-28: register built-in tools (reply path unaffected until agentic)
 
+assertProdSecrets(); // SEC-17: die loudly in prod if a required secret is missing
 const app = buildApp();
 const server = http.createServer(app);
 attachWs(server);
@@ -25,4 +32,21 @@ server.listen(PORT, async () => {
   } catch (e: any) {
     console.error('session restore error:', e?.message || e);
   }
+  // EWS-14: start the workflow spine only when explicitly enabled (default off).
+  if (startSpine()) console.log('   ⚙️  Workflow spine enabled (runner + scheduler).');
+  // EWS-34: the maintenance ticker always runs (retention/TTL sweeps), independent of the spine.
+  startMaintenance();
 });
+
+// EWS-14: on redeploy, stop the tickers and release held leases so no job is stranded.
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    stopMaintenance();
+    await stopSpine();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5_000).unref();
+  });
+}

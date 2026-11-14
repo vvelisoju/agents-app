@@ -5,13 +5,18 @@ import { register } from './registry';
 import prisma from '../lib/prisma';
 import * as realtime from '../lib/realtime';
 import { InboundMessage } from './types';
+import { decryptMaybe } from '../lib/crypto';
 
 const TG = 'https://api.telegram.org/bot';
 const polls = new Map<string, { stop: boolean }>();
 
 async function botToken(agentId: string): Promise<string | null> {
   const a = await prisma.agent.findUnique({ where: { id: agentId } });
-  try { return JSON.parse(a?.channelConfig || '{}').botToken || null; } catch { return null; }
+  try {
+    // SEC-2: botToken is stored encrypted (decryptMaybe handles legacy plaintext too).
+    const stored = JSON.parse(a?.channelConfig || '{}').botToken;
+    return stored ? decryptMaybe(stored) : null;
+  } catch { return null; }
 }
 
 async function setStatus(agentId: string, status: string) {
@@ -74,4 +79,4 @@ export async function sendText(agentId: string, to: string, text: string) {
   });
 }
 
-register({ type: 'telegram', onboarding: 'token', start: startSession, stop: stopSession, send: sendText });
+register({ type: 'telegram', onboarding: 'token', label: 'Telegram', blurb: 'A Telegram bot', ready: true, capabilities: ['text'], start: startSession, stop: stopSession, send: sendText });
