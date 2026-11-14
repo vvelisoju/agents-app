@@ -189,20 +189,29 @@ flip when a tenant KB exceeds the prompt budget).
 | **1 — Phase-6 finish** | TOOL-07/13/16/18/25/26/29 (above) | ✅ |
 | 2 — RAG decision/core (MK) | pgvector — mostly deferred by design; confirm scope | ⬜ |
 | 3 — UX breadth | ✅ Approvals inbox (POL-16/20, inbox-approve resumes campaign runs) · ✅ Insights page (OBS client) · ✅ nav (Automations/Approvals/Insights, SCN-38). Remaining: connected-accounts (needs new backend), SCN-37 scenario picker (lower value — scenario tabs already exist) | 🔨 |
-| 4 — QA + PXD sweep | ✅ **Parallel fan-out (5 subagents):** API tests monitors/outbound/tools (+21), `docs/DATA_MODEL.md`, `docs/OPERATIONS.md` (ops runbook). Fan-out surfaced + fixed a watch agent-scoping isolation bug. Core modules (leads/team/billing/analytics/auth) already smoke-covered by `api.test.ts`. | ✅ |
+| 4 — QA + PXD sweep | ✅ **Parallel fan-out (5 subagents):** API tests monitors/outbound/tools (+21), `docs/DATA_MODEL.md`, `docs/OPERATIONS.md`. Fan-out surfaced + fixed a watch agent-scoping isolation bug. Core modules already smoke-covered by `api.test.ts`. | ✅ |
+| A — Maintenance + metrics | ✅ `lib/maintenance.ts` always-on ticker + `lib/retention.ts` sweeps (EWS-33/34, OBS-18, POL-17: processed events, terminal jobs/runs+steplogs, traces, outbound ledger, expire approvals, audit prune) + EWS-22 `GET /api/workflows/metrics`. | ✅ |
+| B — Per-contact memory | ✅ ContactMemory model (**on prod**) + `lib/memory.ts` ([[REMEMBER:k=v]] extract/recall/store) + engine recall-inject/store-strip gated by `MEMORY_ENABLED` + MK-12 TTL sweep. Reply byte-for-byte when off. | ✅ |
+| C — Connected accounts + config | ✅ GET/DELETE `/api/connected-accounts` (masked list + owner revoke) + `/api/config` memory flag. `docs/SECURITY.md`. | ✅ |
 | 5 — Owner-gated checklist | SEC token-hash, NOT-NULL enforcement, DR drill, Phase-7 scale-out, **enabling the flags in prod** — see `docs/OPERATIONS.md` | ⏸️ **needs owner** |
 
-**Baseline:** 241 tests green (37 files), server+client tsc clean. Test gate ~65s (flat).
+**Baseline:** 253 tests green (41 files), server+client tsc clean. Test gate ~48–72s (flat). 10 migrations
+applied to Railway prod total this session + prior; reply path byte-for-byte throughout; every new runtime
+behavior gated off (`WORKFLOW_ENABLED`/`MONITOR_ENABLED`/`OUTBOUND_ENABLED`/`MEMORY_ENABLED` or per-agent
+`executionMode`). Docs: DATA_MODEL · OPERATIONS · SECURITY · TOOLS · AGENTS · architecture/*.
 
-### Completion posture
-Phases 0–6 are **core-complete + tested**. What remains is not more autonomous code:
+### Completion posture (end of autonomous build)
+Phases 0–6 are **core-complete + tested**, plus memory (MK-9/12), the maintenance/retention/metrics layer, and
+the approvals/insights/connected-accounts surfaces. What remains is **not more autonomous code**:
 - **Owner-gated (⏸️):** SEC-3/4/5 token hashing (mass re-login — maintenance window), orgId NOT-NULL enforcement
-  (after a prod-scale rehearsal), DR restore drill, Phase-7 scale-out, and **turning WORKFLOW/MONITOR/OUTBOUND_ENABLED
-  on in Railway** (runbook in `docs/OPERATIONS.md`).
-- **Deferred by design:** MK-* pgvector RAG (small KBs stay prompt-stuffed; flip when a tenant KB exceeds the
-  prompt budget), plus the §7 "triggered" scale-out items.
-- **Optional polish:** connected-accounts UI (needs new backend), SCN-37 scenario picker (tabs already exist),
-  additional deep test coverage on top of existing smoke tests. 7 migrations applied to Railway prod total; reply path
+  (after a prod-scale rehearsal), DR restore drill, Phase-7 scale-out, and **turning the feature flags on in
+  Railway** (runbook in `docs/OPERATIONS.md`). These need an owner decision/action; they cannot be done from here.
+- **Deferred by design:** pgvector vector RAG (MK-18/20) — needs an embeddings-provider API key; the keyword
+  `knowledge.search` already covers small KBs, which the locked "lightest-sufficient" stance keeps prompt-stuffed
+  until a tenant KB outgrows the prompt budget. Plus the §7 "triggered" scale-out items (pg-boss, 2nd replica).
+- **Intentionally skipped (dead-end / redundant):** connected-accounts UI (store is empty in normal use — the
+  API is ready when populated), SCN-37 scenario picker (per-scenario tabs already exist), SCN-32/33/35 shared
+  cross-agent lead record (the Leads page already aggregates org-wide). 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)
