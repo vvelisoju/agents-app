@@ -14,6 +14,15 @@ import { TEMPLATES } from './lib/templates';
 // Mount every API module. One aggregator (ClassPe pattern).
 export function registerRoutes(app: Express) {
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  // MGW-14/OBS-15: readiness — returns 503 if the DB is unreachable (liveness vs readiness).
+  app.get('/api/health/ready', asyncHandler(async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ ready: true, db: true });
+    } catch {
+      res.status(503).json({ ready: false, db: false });
+    }
+  }));
   app.use('/api/auth', authRouter);
   app.use('/api/public', publicRouter);
   app.get('/api/me', authMiddleware, asyncHandler(async (req, res) =>

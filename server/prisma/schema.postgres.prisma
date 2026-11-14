@@ -27,6 +27,9 @@ model User {
   phone        String   @unique // normalized 10-digit local mobile (digits only)
   passwordHash String
   token        String   @unique
+  tokenHash      String?   @unique // SEC-4: hashed bearer token (replaces plaintext lookups)
+  tokenExpiresAt DateTime? // SEC-5: token expiry
+  lastLoginAt    DateTime?
   role         String   @default("owner")
   createdAt    DateTime @default(now())
 }
@@ -186,4 +189,55 @@ model UsageEvent {
   approvalState  String? // auto | draft | approved | skipped
 
   @@index([orgId, createdAt]) // DB-12: analytics aggregation
+}
+
+// POL-06 — generalized approval queue. Message.status='draft' (approve-before-send) is
+// the first instance; bulk send / booking / delete / financial become additional rows.
+model Approval {
+  id              String    @id @default(uuid())
+  orgId           String
+  agentId         String?
+  actionType      String // send_reply | bulk_send | booking | delete | financial | social_publish
+  payloadJson     String    @default("{}")
+  status          String    @default("pending") // pending | approved | rejected | expired | executed
+  requestedBy     String?
+  decidedByUserId String?
+  decidedAt       DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([orgId, status])
+}
+
+// POL-12 — append-only audit trail of security-relevant actions.
+model AuditLog {
+  id           String   @id @default(uuid())
+  orgId        String
+  actorType    String   @default("user") // user | system | agent
+  actorUserId  String?
+  action       String
+  targetType   String?
+  targetId     String?
+  metadataJson String?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([orgId, createdAt])
+}
+
+// SEC-7 — encrypted external credentials (channel tokens, OAuth). AES-256-GCM blob.
+model ConnectedAccount {
+  id        String    @id @default(uuid())
+  orgId     String
+  agentId   String?
+  provider  String // telegram | meta | google | ...
+  encBlob   String // lib/crypto.ts ciphertext
+  keyId     String?
+  scopes    String?
+  status    String    @default("active")
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
 }
