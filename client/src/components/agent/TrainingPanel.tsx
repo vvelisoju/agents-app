@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { KnowledgeStatus } from '@/components/agent/KnowledgeStatus';
 import { Sparkles, Trash2, Plus, X, Ban, Upload } from 'lucide-react';
 
 // The heart: train-from-link (no typing) + optional manual enrichment.
@@ -117,6 +118,7 @@ export function TrainingPanel({ id }: { id: string }) {
 
   return (
     <div className="space-y-4">
+      <KnowledgeStatus id={id} />
       {/* Fastest path: paste a link, the agent reads it. */}
       <Card className="space-y-3 border-primary/30 p-4">
         <div className="flex items-center gap-2">

@@ -86,7 +86,35 @@ export function CampaignsPanel({ id }: { id: string }) {
       </Card>
 
       {startedRunId && <CampaignProgress id={id} runId={startedRunId} onOpen={() => navigate('/automations')} />}
+      <OptOuts id={id} />
     </div>
+  );
+}
+
+function OptOuts({ id }: { id: string }) {
+  const { toast } = useToast();
+  const key = ['/api/agents/' + id + '/outbound/optouts'];
+  const { data } = useQuery<{ optOuts: Array<{ id: string; phone: string }> }>({ queryKey: key });
+  const rows = data?.optOuts || [];
+  const remove = useMutation({
+    mutationFn: (phone: string) => apiRequest('DELETE', `/api/agents/${id}/outbound/optouts/${phone}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: key }); toast('Removed from the opt-out list.', 'good'); },
+    onError: (e: any) => toast(e.message || 'Could not update', 'warn'),
+  });
+  if (!rows.length) return null;
+  return (
+    <Card className="space-y-2 p-4">
+      <div className="text-sm font-semibold">Opted out ({rows.length})</div>
+      <p className="text-xs text-muted-foreground">People who replied STOP. The drip never messages them. Remove one only if they ask to resubscribe.</p>
+      <ul className="space-y-1">
+        {rows.slice(0, 50).map((o) => (
+          <li key={o.id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-mono text-xs">{o.phone}</span>
+            <button onClick={() => remove.mutate(o.phone)} className="text-xs text-muted-foreground hover:text-primary">Remove</button>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
