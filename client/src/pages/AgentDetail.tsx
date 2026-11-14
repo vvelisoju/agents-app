@@ -12,6 +12,7 @@ import { TrainingPanel } from '@/components/agent/TrainingPanel';
 import { TestPanel } from '@/components/agent/TestPanel';
 import { ChatsPanel } from '@/components/agent/ChatsPanel';
 import { VersionsPanel } from '@/components/agent/VersionsPanel';
+import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -28,6 +29,7 @@ export function AgentDetail({ id }: { id: string }) {
   const { data: agent } = useQuery<any>({ queryKey: agentKey });
   const { data: training } = useQuery<any>({ queryKey: ['/api/agents/' + id + '/training'] });
   const { data: me } = useQuery<any>({ queryKey: ['/api/me'] });
+  const { data: config } = useQuery<any>({ queryKey: ['/api/config'] });
   const [tab, setTab] = React.useState('train');
   const [setupDone, setSetupDone] = React.useState(() => readDone(id));
 
@@ -102,10 +104,21 @@ export function AgentDetail({ id }: { id: string }) {
         </div>
 
         <div className="space-y-4">
-          <Tabs tabs={[{ id: 'train', label: 'Train' }, { id: 'test', label: 'Test' }, { id: 'chats', label: 'Chats' }, { id: 'versions', label: 'Versions' }]} value={tab} onChange={setTab} />
+          <Tabs
+            tabs={[
+              { id: 'train', label: 'Train' },
+              { id: 'test', label: 'Test' },
+              { id: 'chats', label: 'Chats' },
+              ...(config?.features?.monitor ? [{ id: 'monitors', label: 'Monitors' }] : []),
+              { id: 'versions', label: 'Versions' },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
           {tab === 'train' && <TrainingPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
+          {tab === 'monitors' && config?.features?.monitor && <MonitorsPanel id={id} />}
           {tab === 'versions' && <VersionsPanel id={id} />}
         </div>
       </div>

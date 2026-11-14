@@ -7,6 +7,12 @@ export function workflowEnabled(): boolean {
   return v === '1' || v === 'true';
 }
 
+// SCN-36 — per-scenario flag, default off. The scheduled-monitor handler is inert unless set.
+export function monitorEnabled(): boolean {
+  const v = process.env.MONITOR_ENABLED;
+  return v === '1' || v === 'true';
+}
+
 export function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || '';
   // The dev/test datasource is SQLite (file:...); everything else is Postgres.

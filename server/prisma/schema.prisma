@@ -353,3 +353,27 @@ model WorkflowStepLog {
 
   @@index([runId, createdAt])
 }
+
+// SCN-27 — a scheduled website/offer/price monitor. The scheduled-monitor handler fetches
+// `url` (SSRF-guarded), extracts readable text, hashes it, and notifies on change. One Watch
+// owns one cron Trigger on the spine (triggerId) created/removed with it.
+model Watch {
+  id             String    @id @default(uuid())
+  orgId          String
+  agentId        String
+  url            String
+  label          String?
+  cronExpr       String    @default("0 * * * *") // default: hourly
+  notifyNumber   String? // owner number to ping; falls back to the agent's alert number
+  active         Boolean   @default(true)
+  triggerId      String? // the spine Trigger that drives this watch
+  lastHash       String?
+  lastSnapshot   String?
+  lastCheckedAt  DateTime?
+  lastChangedAt  DateTime?
+  lastChangeNote String?
+  createdAt      DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}

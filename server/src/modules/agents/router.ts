@@ -80,6 +80,47 @@ scoped.get('/workflows', asyncHandler(async (req, res) => {
   res.json({ runs: await listRuns((req as any).user.orgId, { agentId: agent(req).id, limit: 100 }) });
 }));
 
+// SCN-42 — website-monitor watches (fetch → diff → notify on change), spine-driven.
+scoped.get('/watches', asyncHandler(async (req, res) => {
+  const { listWatches } = await import('../monitors/service');
+  res.json({ watches: await listWatches((req as any).user.orgId, agent(req).id) });
+}));
+
+scoped.post('/watches', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const url = String(req.body?.url || '').trim();
+  if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const { createWatch } = await import('../monitors/service');
+    const watch = await createWatch({
+      orgId: (req as any).user.orgId,
+      agentId: agent(req).id,
+      url,
+      label: req.body?.label ? String(req.body.label) : undefined,
+      cadence: req.body?.cadence ? String(req.body.cadence) : undefined,
+      notifyNumber: req.body?.notifyNumber ? String(req.body.notifyNumber) : undefined,
+    });
+    audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'watch.create', targetType: 'watch', targetId: watch.id });
+    res.json(watch);
+  } catch (e: any) {
+    res.status(400).json({ error: e?.friendly ? e.message : 'Could not add that watch', code: 'watch_failed' });
+  }
+}));
+
+scoped.patch('/watches/:watchId', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { setWatchActive } = await import('../monitors/service');
+  const watch = await setWatchActive((req as any).user.orgId, String(req.params.watchId), !!req.body?.active);
+  if (!watch) return res.status(404).json({ error: 'not found' });
+  res.json(watch);
+}));
+
+scoped.delete('/watches/:watchId', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { deleteWatch } = await import('../monitors/service');
+  const ok = await deleteWatch((req as any).user.orgId, String(req.params.watchId));
+  if (!ok) return res.status(404).json({ error: 'not found' });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'watch.delete', targetType: 'watch', targetId: String(req.params.watchId) });
+  res.json({ ok: true });
+}));
+
 // ---- SPEC-13..18 / STU — Agent Spec, versioning, lifecycle & clone ----
 scoped.get('/spec', asyncHandler(async (req, res) => {
   res.json({ spec: await specFromAgent(agent(req).id) });
