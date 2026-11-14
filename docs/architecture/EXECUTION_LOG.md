@@ -237,7 +237,13 @@ WORKFLOW/MONITOR/MEMORY on, OUTBOUND off.
 |---|---|
 | **PDF/document ingestion** | ✅ `lib/pdf.ts` + `learnFromText` refactor + `POST /training/learn-document` (raw PDF → extract → condense into a training draft) + client "Upload a PDF". Live-verified with a real PDF. |
 | **RAG (vector search)** | ✅ **Pluggable + built** (`99bf976`). KnowledgeChunk model (on prod); `lib/embeddings.ts` (voyage/openai/cohere, gated on EMBEDDINGS_PROVIDER + key); `lib/knowledge.ts` chunk/ingest/search (vector cosine in-process when a key is set, keyword fallback otherwise — no pgvector). PDF upload indexes the full text; `knowledge.search` tool backed by it. Works today with zero config; set a key to switch on vectors (reindex endpoint for old docs). |
-| **Custom DB/API connector** | ⏸️ needs the owner to define the concrete use case (becomes a registry tool). | 7 migrations applied to Railway prod total; reply path
+| **Custom DB/API connector** | ✅ **Built + live-verified** (`363fd83`). Owner configures named parameterized operations (Connector + ConnectorOp); the model picks an op + fills typed values only (never raw SQL). `data.query` (read, inline) + `data.action` (write, approval-gated), access-gated (customer/admin), Postgres/MySQL/REST, encrypted secrets, `/api/connectors` mgmt API. Live test: an agent ran `SELECT now()` against the app's own Postgres via a configured op and returned the real time. |
+
+**All three new-scope items (PDF, RAG, connectors) are built, deployed, and live-verified on production.**
+
+> ⚠️ **Concurrent-session note:** commit `363fd83` also swept in another session's in-progress `transcribe`
+> feature (voice transcription). It compiles + is gated (deploy healthy), but two sessions on one working
+> tree interleave uncommitted files — run one at a time, or commit only your own files. 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)
