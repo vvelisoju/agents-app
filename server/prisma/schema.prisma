@@ -421,6 +421,27 @@ model OutboundSendLog {
   @@index([connectionId, createdAt])
 }
 
+// SCN-20 — appointment booking. A confirmed booking holds a slot; the overlap guard (SCN-22)
+// rejects two confirmed bookings on the same agent at overlapping times.
+model Booking {
+  id             String   @id @default(uuid())
+  orgId          String
+  agentId        String
+  conversationId String?
+  contactNumber  String
+  contactName    String?
+  startAt        DateTime
+  endAt          DateTime
+  status         String   @default("confirmed") // draft | confirmed | cancelled
+  note           String?
+  externalRef    String? // dedupe/idempotency key (e.g. agentId+contact+slot) — unique
+  createdAt      DateTime @default(now())
+
+  @@unique([externalRef])
+  @@index([orgId])
+  @@index([agentId, startAt])
+}
+
 // STOP/unsubscribe suppression. A suppressed (agent, phone) is never sent to by the drip.
 model OutboundOptOut {
   id        String   @id @default(uuid())

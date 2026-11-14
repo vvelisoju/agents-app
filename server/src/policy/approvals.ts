@@ -4,6 +4,7 @@
 // execution of an approved action is the consumer's job (Phase 5/6 handlers set 'executed').
 import prisma from '../lib/prisma';
 import { audit } from '../lib/audit';
+import { fireApproved } from './approvalExecutor';
 import type { Action } from './engine';
 
 export function createApproval(input: {
@@ -57,6 +58,8 @@ export async function decideApproval(
     data: { status: decision, decidedByUserId: userId ?? null, decidedAt: new Date() },
   });
   audit({ orgId, actorUserId: userId, action: `approval.${decision}`, targetType: 'approval', targetId: id, metadata: { actionType: a.actionType } });
+  // POL-10: on approval, run any registered executor for this action (e.g. a gated tool call).
+  if (decision === 'approved') await fireApproved(approval);
   return { ok: true, status: decision, approval };
 }
 
