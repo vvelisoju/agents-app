@@ -59,9 +59,22 @@ DB-14 tenant-scope helper (apply orgId filters to by-id reads) · DB-15 seed · 
 doc · DB-21 perf check · DB-22 doc reconcile · QA-57 backfill-correctness test · **NOT NULL enforcement** on the
 new orgId columns (after DB-24 prod-scale rehearsal — owner) · DB-17/QA-48 DR restore drill (owner).
 
-### Phase 2 — now UNBLOCKED (migrations work)
-Model gateway ✅ (done, migration-independent). Next: extend `UsageEvent` → execution-trace row (OBS-1) +
-`Agent.executionMode` (MGW-4) as a migration; budget gate (MGW-10/11); pino logging; runtime facade.
+### Phase 2 — Model gateway, observability & cost control (core DONE)
+| Task | Status | Notes |
+|---|---|---|
+| MGW-1/2/3 model gateway + FND-31 token capture | ✅ | `lib/model-gateway.ts` (timeout/retry/usage); `brain.askClaude`/`generate` wrappers. |
+| OBS-1/MGW-4 execution trace + Agent.executionMode | ✅ | UsageEvent extended (migration **applied to prod**); `lib/trace.ts` writes one enriched row per reply (fire-and-forget) with cost from `lib/pricing.ts`. |
+| MGW-10/11 per-tenant budget gate | ✅ | `lib/budget.ts` daily cap enforced in `processInbound` → covers all channels incl. the widget; `budget_exceeded` outcome. |
+| OBS-6 structured logging + redaction · DB-15 seed | ✅ | `lib/log.ts`; `prisma/seed.ts` (prod-guarded, idempotent). |
+
+**Parallel pattern established & working:** subagents authored the 4 independent modules (pricing/log/budget/seed —
+7 files, 13 tests) in parallel while the orchestrator did the coupled migration + engine wiring; integrated to green.
+**93 tests, tsc clean. 18 commits.** Reply path byte-for-byte unchanged.
+
+### Phase 2 — remaining
+OBS-11/12/13 analytics `/executions` + `/metrics` endpoints · OBS-19/20/21 client execution viewer + metric tiles ·
+MGW-14/OBS-15 `/api/health/ready` · MGW-7/8 runtime facade + loader · MGW-15/16/UX-20/21 client usage/cost surface.
+Then **Phase 3** (policy/approvals/audit/identity — migration-backed, now unblocked).
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 
