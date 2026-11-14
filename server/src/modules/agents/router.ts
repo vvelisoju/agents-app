@@ -15,6 +15,7 @@ import { widgetKey } from '../../lib/widgetKey';
 import { encryptSecret, isEncrypted } from '../../lib/crypto';
 import { requirePermission } from '../../middleware/authz';
 import { audit } from '../../lib/audit';
+import { validateSpec, specFromAgent, applySpec } from '../../lib/agentSpec';
 
 const router = Router();
 
@@ -52,6 +53,80 @@ async function loadSources(agentId: string): Promise<Source[]> {
 // carry it (the public endpoints reject requests without it).
 scoped.get('/widget-key', asyncHandler(async (req, res) => {
   res.json({ key: widgetKey(agent(req).id) });
+}));
+
+// ---- SPEC-13..18 / STU — Agent Spec, versioning, lifecycle & clone ----
+scoped.get('/spec', asyncHandler(async (req, res) => {
+  res.json({ spec: await specFromAgent(agent(req).id) });
+}));
+
+scoped.post('/apply-spec', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const v = validateSpec(req.body?.spec);
+  if (!v.ok) return res.status(400).json({ error: 'invalid spec', issues: v.errors });
+  await applySpec(agent(req).id, v.spec);
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.apply_spec', targetType: 'agent', targetId: agent(req).id });
+  res.json({ ok: true, spec: await specFromAgent(agent(req).id) });
+}));
+
+scoped.get('/versions', asyncHandler(async (req, res) => {
+  const versions = await prisma.agentVersion.findMany({
+    where: { agentId: agent(req).id }, orderBy: { version: 'desc' },
+    select: { id: true, version: true, note: true, status: true, createdAt: true },
+  });
+  res.json({ versions, currentVersionId: agent(req).currentVersionId });
+}));
+
+// Publish: snapshot the current live spec into an immutable AgentVersion.
+scoped.post('/versions', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const spec = await specFromAgent(agent(req).id);
+  const last = await prisma.agentVersion.findFirst({ where: { agentId: agent(req).id }, orderBy: { version: 'desc' } });
+  const version = (last?.version || 0) + 1;
+  const av = await prisma.agentVersion.create({
+    data: { agentId: agent(req).id, version, specJson: JSON.stringify(spec), note: String(req.body?.note || '').slice(0, 200) || null, createdByUserId: (req as any).user.id },
+  });
+  await prisma.agent.update({ where: { id: agent(req).id }, data: { currentVersionId: av.id } });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.publish_version', targetType: 'agent', targetId: agent(req).id, metadata: { version } });
+  res.json({ id: av.id, version });
+}));
+
+// Rollback: re-apply a published version's spec to the live rows (the highest-value payoff).
+scoped.post('/rollback', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const version = Number(req.body?.version);
+  const av = await prisma.agentVersion.findFirst({ where: { agentId: agent(req).id, version } });
+  if (!av) return res.status(404).json({ error: 'version not found' });
+  const v = validateSpec(JSON.parse(av.specJson));
+  if (!v.ok) return res.status(400).json({ error: 'stored spec invalid', issues: v.errors });
+  await applySpec(agent(req).id, v.spec);
+  await prisma.agent.update({ where: { id: agent(req).id }, data: { currentVersionId: av.id } });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.rollback', targetType: 'agent', targetId: agent(req).id, metadata: { version } });
+  res.json({ ok: true, version });
+}));
+
+// Clone: create a new agent from this one's spec (secrets stripped — reconnect its channel).
+scoped.post('/clone', requirePermission('agent_create'), asyncHandler(async (req, res) => {
+  const spec = await specFromAgent(agent(req).id);
+  if (!spec) return res.status(404).json({ error: 'agent not found' });
+  const orgId = (req as any).user.orgId;
+  const sub = await prisma.subscription.findUnique({ where: { orgId } });
+  const count = await prisma.agent.count({ where: { orgId } });
+  if (sub && count >= sub.maxAgents) return res.status(402).json({ error: 'plan limit reached', code: 'subscription_required' });
+  const newName = String(req.body?.name || `${spec.identity.name} (copy)`).slice(0, 80);
+  const created = await prisma.agent.create({ data: { orgId, name: newName, channelType: spec.channel.type } });
+  await prisma.trainingProfile.create({ data: { agentId: created.id, orgId } });
+  await applySpec(created.id, { ...spec, identity: { name: newName } });
+  audit({ orgId, actorUserId: (req as any).user.id, action: 'agent.clone', targetType: 'agent', targetId: created.id });
+  res.json(created);
+}));
+
+// Lifecycle transition (SPEC-11/12): draft -> active -> paused -> archived (NOT connection).
+const LIFECYCLE: Record<string, string[]> = { draft: ['active', 'archived'], active: ['paused', 'archived'], paused: ['active', 'archived'], archived: [] };
+scoped.post('/lifecycle', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const to = String(req.body?.status || '');
+  const from = (agent(req) as any).lifecycleStatus || 'draft';
+  if (!LIFECYCLE[from]?.includes(to)) return res.status(400).json({ error: `cannot move ${from} -> ${to}` });
+  await prisma.agent.update({ where: { id: agent(req).id }, data: { lifecycleStatus: to } });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.lifecycle', targetType: 'agent', targetId: agent(req).id, metadata: { from, to } });
+  res.json({ ok: true, lifecycleStatus: to });
 }));
 
 scoped.get('/', asyncHandler(async (req, res) => res.json(agent(req))));

@@ -68,6 +68,8 @@ model Agent {
   status        String           @default("draft")
   autoSend      Boolean          @default(false)
   executionMode String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop, later)
+  currentVersionId String?       // SPEC: active AgentVersion pointer; null = live-edit mode (default)
+  lifecycleStatus  String        @default("draft") // SPEC: draft | active | paused | archived (NOT connection status)
   paused        Boolean          @default(false)
   awayMessage   String?
   hoursStart    Int?
@@ -87,6 +89,25 @@ model Agent {
   sources       TrainingSource[]
   conversations Conversation[]
   session       ChannelSession?
+  versions      AgentVersion[]
+}
+
+// SPEC-1 — immutable published snapshots of an agent's full config (the AgentSpec JSON),
+// for version history + one-click rollback. currentVersionId on Agent points at the active
+// one; null means live-edit (reads TrainingProfile/TrainingSource directly — the default).
+model AgentVersion {
+  id              String   @id @default(uuid())
+  agentId         String
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  version         Int
+  specJson        String
+  status          String   @default("published")
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  @@unique([agentId, version])
+  @@index([agentId])
 }
 
 model ChannelSession {
