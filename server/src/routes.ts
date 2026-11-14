@@ -13,6 +13,7 @@ import { requirePermission } from './middleware/authz';
 import { audit } from './lib/audit';
 import { asyncHandler } from './middleware/asyncHandler';
 import { TEMPLATES } from './lib/templates';
+import { listAdapters } from './channels/registry';
 
 // Mount every API module. One aggregator (ClassPe pattern).
 export function registerRoutes(app: Express) {
@@ -33,6 +34,18 @@ export function registerRoutes(app: Express) {
   ));
   app.get('/api/templates', authMiddleware, (_req, res) =>
     res.json(TEMPLATES.map((t) => ({ id: t.id, label: t.label, emoji: t.emoji }))),
+  );
+  // STU-17: the channel catalog is generated from the adapter registry (kills the
+  // hardcoded client channel list). 'test' (a test-only adapter) is excluded.
+  app.get('/api/channels', authMiddleware, (_req, res) =>
+    res.json({
+      channels: listAdapters()
+        .filter((a) => a.type !== 'test')
+        .map((a) => ({
+          type: a.type, label: a.label || a.type, blurb: a.blurb || '',
+          onboarding: a.onboarding, ready: a.ready !== false, capabilities: a.capabilities || [],
+        })),
+    }),
   );
   app.use('/api/agents', authMiddleware, agentsRouter);
   app.use('/api/leads', authMiddleware, leadsRouter);

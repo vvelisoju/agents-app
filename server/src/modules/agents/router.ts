@@ -16,6 +16,8 @@ import { encryptSecret, isEncrypted } from '../../lib/crypto';
 import { requirePermission } from '../../middleware/authz';
 import { audit } from '../../lib/audit';
 import { validateSpec, specFromAgent, applySpec } from '../../lib/agentSpec';
+import { generateSpecFromNL } from '../../lib/agentBuilder';
+import { canSpend } from '../../lib/budget';
 
 const router = Router();
 
@@ -36,6 +38,23 @@ router.post('/', validate(createAgentSchema), asyncHandler(async (req, res) => {
   const agent = await prisma.agent.create({ data: { orgId, name, channelType: req.body?.channelType || 'whatsapp-web' } });
   await prisma.trainingProfile.create({ data: { agentId: agent.id, orgId } });
   res.json(agent);
+}));
+
+// STU-7: describe an agent in words -> a VALIDATED AgentSpec draft (nothing saved).
+// Budget-gated (paid model call); build-from-URL inherits the SSRF guard via learn.ts.
+router.post('/build', requirePermission('agent_create'), asyncHandler(async (req, res) => {
+  const orgId = (req as any).user.orgId;
+  const spend = await canSpend(orgId);
+  if (!spend.allowed) return res.status(429).json({ error: 'daily limit reached', code: 'budget_exceeded' });
+  try {
+    const out = await generateSpecFromNL(String(req.body?.description || ''), {
+      url: req.body?.url ? String(req.body.url) : undefined,
+      channelType: req.body?.channelType ? String(req.body.channelType) : undefined,
+    });
+    res.json(out);
+  } catch (e: any) {
+    res.status(400).json({ error: e?.friendly ? e.message : 'Could not build the agent', code: 'build_failed' });
+  }
 }));
 
 // ---- agent-scoped (requireAgent sets req.agent) ----

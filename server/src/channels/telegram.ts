@@ -79,4 +79,4 @@ export async function sendText(agentId: string, to: string, text: string) {
   });
 }
 
-register({ type: 'telegram', onboarding: 'token', start: startSession, stop: stopSession, send: sendText });
+register({ type: 'telegram', onboarding: 'token', label: 'Telegram', blurb: 'A Telegram bot', ready: true, capabilities: ['text'], start: startSession, stop: stopSession, send: sendText });

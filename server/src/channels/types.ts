@@ -10,6 +10,12 @@ export interface InboundMessage {
 export interface ChannelAdapter {
   type: string;                                   // 'whatsapp-web' | 'website' | …
   onboarding: 'qr' | 'embed' | 'oauth' | 'token' | 'none';
+  // STU-16: catalog metadata so the client channel picker is generated from the registry
+  // (not a hardcoded client list). Optional with sensible fallbacks in GET /api/channels.
+  label?: string;                                 // "WhatsApp"
+  blurb?: string;                                 // one-line description for the picker
+  ready?: boolean;                                // false = coming-soon (default true)
+  capabilities?: string[];                        // ['text','images','location',…]
   // Optional lifecycle (WhatsApp needs it; a website widget does not).
   start?(agentId: string): Promise<void>;
   stop?(agentId: string): Promise<void>;
