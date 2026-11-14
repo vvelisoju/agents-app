@@ -13,6 +13,13 @@ export function monitorEnabled(): boolean {
   return v === '1' || v === 'true';
 }
 
+// SCN-36 — outbound QR drip flag, default off. With it off the STOP opt-out pre-check and the
+// drip handler are inert, so processInbound is byte-for-byte today's.
+export function outboundEnabled(): boolean {
+  const v = process.env.OUTBOUND_ENABLED;
+  return v === '1' || v === 'true';
+}
+
 export function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || '';
   // The dev/test datasource is SQLite (file:...); everything else is Postgres.

@@ -11,6 +11,9 @@ import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
 import { getAdapter } from '../channels/registry';
 import { InboundMessage } from '../channels/types';
+import { outboundEnabled } from '../lib/spineEnv';
+import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
+import { withSendLock } from '../lib/sendMutex';
 
 // Don't re-ping the owner about the same lead more than once per this window.
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -90,7 +93,7 @@ export async function draftFor(agent: any, message: string): Promise<{ draft: st
 }
 
 export interface ProcessResult {
-  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away' | 'budget_exceeded';
+  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away' | 'budget_exceeded' | 'opted_out';
   reply?: string;
   conversationId?: string;
 }
@@ -141,6 +144,18 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   });
   await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'inbound', body: text, status: 'received' } });
   realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'received' });
+
+  // SCN-10: outbound STOP/unsubscribe opt-out. Gated by OUTBOUND_ENABLED (off → byte-for-byte
+  // today). A match suppresses the contact (the drip skips it), sends ONE neutral confirmation,
+  // and does NOT AI-reply. Any other message flows to the agent exactly as before.
+  if (outboundEnabled() && isOptOutMessage(text)) {
+    await suppressContact(agent.orgId, agentId, inbound.from);
+    const adapter = getAdapter(agent.channelType);
+    try { if (adapter) await withSendLock(agentId, () => adapter.send(agentId, inbound.from, OPT_OUT_CONFIRMATION)); } catch { /* confirmation is best-effort */ }
+    await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: OPT_OUT_CONFIRMATION, status: 'opted_out' } });
+    realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'opted_out' });
+    return { status: 'opted_out', conversationId: conv.id };
+  }
 
   // Respect agent pause, per-conversation human takeover, and mute: still log the
   // inbound (owner sees it), but the AI does not reply.

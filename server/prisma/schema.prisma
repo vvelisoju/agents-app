@@ -377,3 +377,57 @@ model Watch {
   @@index([orgId])
   @@index([agentId])
 }
+
+// ─── SCN-05: Outbound QR drip (Trackly-model, whatsapp-web ONLY; gated by OUTBOUND_ENABLED) ───
+
+// A connection to a recipient source + its send policy. Token stored encrypted (AES-256-GCM).
+// A connection cannot activate without a persisted risk acknowledgement (accepted-risk design).
+model OutboundConnection {
+  id          String    @id @default(uuid())
+  orgId       String
+  agentId     String
+  provider    String    @default("trackly")
+  tokenEnc    String? // lib/crypto ciphertext — never logged
+  dailyCap    Int       @default(50)
+  windowStart Int       @default(10) // local hour, inclusive
+  windowEnd   Int       @default(18) // local hour, exclusive
+  minGapSec   Int       @default(240)
+  maxGapSec   Int       @default(420)
+  warmupDays  Int       @default(5)
+  warmupStart Int       @default(10) // day-1 effective cap, ramps to dailyCap over warmupDays
+  active      Boolean   @default(false)
+  riskAckAt   DateTime? // written when the owner accepts the ban-risk acknowledgement
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}
+
+// Send ledger — source of truth for the daily counter (survives restarts) and the idempotency
+// guard: a (connection, campaign, recipient) tuple can be sent at most once.
+model OutboundSendLog {
+  id                String   @id @default(uuid())
+  orgId             String
+  connectionId      String
+  campaignId        String   @default("")
+  recipient         String // normalized phone
+  status            String   @default("sent") // sent | delivered | read | failed | opted_out
+  providerMessageId String?
+  createdAt         DateTime @default(now())
+
+  @@unique([connectionId, campaignId, recipient])
+  @@index([orgId, createdAt])
+  @@index([connectionId, createdAt])
+}
+
+// STOP/unsubscribe suppression. A suppressed (agent, phone) is never sent to by the drip.
+model OutboundOptOut {
+  id        String   @id @default(uuid())
+  orgId     String
+  agentId   String
+  phone     String
+  createdAt DateTime @default(now())
+
+  @@unique([agentId, phone])
+  @@index([orgId])
+}
