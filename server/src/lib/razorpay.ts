@@ -7,12 +7,12 @@ const keyId = () => process.env.RAZORPAY_KEY_ID || '';
 const keySecret = () => process.env.RAZORPAY_KEY_SECRET || '';
 export const configured = () => !!(keyId() && keySecret());
 
-export async function createOrder(amountPaise: number, receipt: string) {
+export async function createOrder(amountPaise: number, receipt: string, notes?: Record<string, string>) {
   const auth = Buffer.from(`${keyId()}:${keySecret()}`).toString('base64');
   const r = await fetch('https://api.razorpay.com/v1/orders', {
     method: 'POST',
     headers: { Authorization: 'Basic ' + auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt, payment_capture: 1 }),
+    body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt, payment_capture: 1, ...(notes ? { notes } : {}) }),
   });
   const j: any = await r.json();
   if (!r.ok) throw new Error(j?.error?.description || 'razorpay order creation failed');
