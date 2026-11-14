@@ -255,6 +255,9 @@ scoped.post('/messages/:mid/skip', asyncHandler(async (req, res) => {
 // Body: { to: "<10-digit>", text?: string, mediaUrl?: string }. Remove after testing.
 scoped.post('/test-send', asyncHandler(async (req, res) => {
   if (process.env.TEST_SEND_ENABLED !== 'true') return res.status(403).json({ error: 'test-send disabled' });
+  // FND-07: the comment promised owner-only but it was never enforced — a member could
+  // drive outbound sends. Gate it until the Phase-5 outbound-drip handler replaces it.
+  if ((req as any).user?.role !== 'owner') return res.status(403).json({ error: 'owner only', code: 'forbidden' });
   const a = agent(req);
   if (a.channelType !== 'whatsapp-web') return res.status(400).json({ error: 'not a whatsapp-web agent' });
   const to10 = normalizePhone(String(req.body?.to || ''));
