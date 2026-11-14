@@ -236,8 +236,8 @@ WORKFLOW/MONITOR/MEMORY on, OUTBOUND off.
 | Item | Status |
 |---|---|
 | **PDF/document ingestion** | ✅ `lib/pdf.ts` + `learnFromText` refactor + `POST /training/learn-document` (raw PDF → extract → condense into a training draft) + client "Upload a PDF". Live-verified with a real PDF. |
-| **RAG (vector search)** | ⏸️ needs an embeddings provider + API key (Anthropic has none). To build provider-pluggable + pgvector; keyword `knowledge.search` is the fallback until a key is set. |
-| **Custom DB/API connector** | ⏸️ needs the owner to define the concrete use case (a registry tool). | 7 migrations applied to Railway prod total; reply path
+| **RAG (vector search)** | ✅ **Pluggable + built** (`99bf976`). KnowledgeChunk model (on prod); `lib/embeddings.ts` (voyage/openai/cohere, gated on EMBEDDINGS_PROVIDER + key); `lib/knowledge.ts` chunk/ingest/search (vector cosine in-process when a key is set, keyword fallback otherwise — no pgvector). PDF upload indexes the full text; `knowledge.search` tool backed by it. Works today with zero config; set a key to switch on vectors (reindex endpoint for old docs). |
+| **Custom DB/API connector** | ⏸️ needs the owner to define the concrete use case (becomes a registry tool). | 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)
