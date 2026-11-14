@@ -218,6 +218,7 @@ model UsageEvent {
   approvalState  String? // auto | draft | approved | skipped
 
   @@index([orgId, createdAt]) // DB-12: analytics aggregation
+  @@index([agentId, createdAt]) // OBS-2: per-agent analytics (perAgent counts, agent execution feed)
 }
 
 // TOOL-29 — per-tool-call step trace for the agentic path. One row per tool invocation, keyed

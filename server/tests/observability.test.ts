@@ -59,4 +59,32 @@ describe('observability endpoints', () => {
     expect(typeof r.body.nearCap).toBe('boolean');
     expect(owner.token).toBeTruthy();
   });
+
+  // OBS-9 — the analytics summary must reconcile with the raw rows (no aggregation drift).
+  it('/api/analytics counts match the raw table data', async () => {
+    const org = await createOrg();
+    const owner = await createUser(org.id, 'owner');
+    const a1 = await createAgent(org.id);
+    const a2 = await createAgent(org.id);
+    // Two conversations (one won), and three replies (two today, one backdated).
+    await prisma.conversation.create({ data: { orgId: org.id, agentId: a1.id, contactNumber: 'c1', leadStatus: 'won' } });
+    await prisma.conversation.create({ data: { orgId: org.id, agentId: a1.id, contactNumber: 'c2', leadStatus: 'new' } });
+    await prisma.usageEvent.create({ data: { orgId: org.id, agentId: a1.id, type: 'reply', executionId: 'e1', outcome: 'sent' } });
+    await prisma.usageEvent.create({ data: { orgId: org.id, agentId: a2.id, type: 'reply', executionId: 'e2', outcome: 'sent' } });
+    await prisma.usageEvent.create({ data: { orgId: org.id, agentId: a1.id, type: 'reply', executionId: 'e3', outcome: 'sent', createdAt: new Date(Date.now() - 2 * 864e5) } });
+
+    const r = await request(app).get('/api/analytics').set(auth(owner.token));
+    expect(r.status).toBe(200);
+
+    // Reconcile each summary field against a direct count.
+    expect(r.body.agents).toBe(await prisma.agent.count({ where: { orgId: org.id } }));
+    expect(r.body.conversations).toBe(await prisma.conversation.count({ where: { orgId: org.id } }));
+    expect(r.body.repliesTotal).toBe(await prisma.usageEvent.count({ where: { orgId: org.id } }));
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    expect(r.body.repliesToday).toBe(await prisma.usageEvent.count({ where: { orgId: org.id, createdAt: { gte: startOfDay } } }));
+    expect(r.body.leadsByStatus.won).toBe(1);
+    // perAgent totals sum back to repliesTotal.
+    const perAgentSum = r.body.perAgent.reduce((s: number, p: any) => s + p.repliesTotal, 0);
+    expect(perAgentSum).toBe(r.body.repliesTotal);
+  });
 });
