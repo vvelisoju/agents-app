@@ -6,13 +6,14 @@ import { Wordmark, Brand } from '@/components/Brand';
 import { NotificationsDrawer } from './NotificationsDrawer';
 import { ProfileMenu } from './ProfileMenu';
 import { cn } from '@/lib/utils';
-import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck } from 'lucide-react';
+import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck, BarChart3 } from 'lucide-react';
 
 const NAV = [
   { path: '/agents', label: 'Agents', icon: Bot },
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/automations', label: 'Automations', icon: Zap },
   { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { path: '/insights', label: 'Insights', icon: BarChart3 },
   { path: '/leads', label: 'Leads', icon: Users },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

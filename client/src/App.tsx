@@ -10,6 +10,7 @@ import { AgentDetail } from '@/pages/AgentDetail';
 import { Inbox } from '@/pages/Inbox';
 import { Automations } from '@/pages/Automations';
 import { Approvals } from '@/pages/Approvals';
+import { Insights } from '@/pages/Insights';
 import { Leads } from '@/pages/Leads';
 import { Settings } from '@/pages/Settings';
 import { Subscription } from '@/pages/Subscription';
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/inbox" component={Inbox} />
         <Route path="/automations" component={Automations} />
         <Route path="/approvals" component={Approvals} />
+        <Route path="/insights" component={Insights} />
         <Route path="/leads" component={Leads} />
         <Route path="/settings" component={Settings} />
         <Route path="/subscription" component={Subscription} />
