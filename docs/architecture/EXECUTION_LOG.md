@@ -168,25 +168,36 @@ pg-boss decision · EWS-32 inbound-durability ADR.
 | SCN-20/22/24/25/41 booking | ✅ | Booking model (**on prod**) + calendar.book + bookings read/cancel API + client `BookingsPanel`. |
 | TOOL-22/23/24 + SCN-25 tests | ✅ | `tools.test.ts` (9), `agentic.test.ts` (5), `booking.test.ts` (5). **214 total green, tsc clean.** |
 
-### Phase 6 — remaining
-TOOL-07 channel.send_message tool · TOOL-16/18/29 per-tool-call step trace + execution viewer UI · TOOL-13
-AgentSpec.tools[] round-trip + version snapshot · TOOL-25 'adding a tool' docs · TOOL-26 MCP-client decision
-record · TOOL-12 + MK-* pgvector RAG (deferred until a tenant's KB exceeds the prompt budget — small KBs stay
-prompt-stuffed). SCN-32/33/35 shared cross-agent lead record. EWS-22/33/34 metrics + retention sweeps.
+### Phase 6 — FINISHED (TOOL module complete)
+| Task | Status | Notes |
+|---|---|---|
+| TOOL-07 channel.send_message | ✅ | External, approval-gated, mutexed send tool. |
+| TOOL-16/29 per-tool-call step trace | ✅ | ExecutionStep model (**on prod**); `executeTool` writes one redacted step/call; reply-mode writes zero. |
+| TOOL-18 execution viewer | ✅ | GET /executions + client `ActivityPanel` (under Abilities). |
+| TOOL-13 spec tools[] round-trip | ✅ | `enabledToolsJson` ↔ `spec.tools`; flips executionMode; in version snapshots. |
+| TOOL-25/26 docs | ✅ | `docs/architecture/TOOLS.md` — adding-a-tool guide + no-MCP-yet decision + flip trigger. |
 
-### Scenarios now built on the spine (all gated/opt-in, prod byte-for-byte until enabled)
-Reply (always on) · **Website monitor** (MONITOR_ENABLED) · **Outbound QR drip** (OUTBOUND_ENABLED) ·
-**Appointment booking** (per-agent calendar.book ability). Tools/agentic are per-agent (executionMode),
-no global flag. 6 migrations applied to Railway prod this session; reply path unchanged throughout.
+**Remaining in Phase 6:** TOOL-12 + MK-* pgvector RAG — **deferred by design** (small KBs stay prompt-stuffed;
+flip when a tenant KB exceeds the prompt budget).
 
-### Phases 6 (not started)
-Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). Booking's calendar.book tool
-(SCN-21) depends on the Phase-6 tool registry.
+---
 
-### Phases 5–6 (not started) — feature build
-Event/trigger/workflow spine (Postgres SKIP-LOCKED + node-cron) + outbound Trackly QR drip + scheduled monitors +
-appointment booking; tools registry + bounded agentic loop; memory/RAG (pgvector on trigger). Plus the broad
-client-UX layer (Approvals inbox, Automations console, Insights, Connected accounts, etc.). Large multi-session work.
+## Parallel execution waves (single-orchestrator, test-gated)
+| Wave | Scope | Status |
+|---|---|---|
+| **0 — Gate hardening** | test setup: schema built once/run + fast per-file table-clear; 167s→68s, scales flat | ✅ |
+| **1 — Phase-6 finish** | TOOL-07/13/16/18/25/26/29 (above) | ✅ |
+| 2 — RAG decision/core (MK) | pgvector — mostly deferred by design; confirm scope | ⬜ |
+| 3 — UX breadth | approvals inbox, insights, connected-accounts, STU pickers, SCN-37/38 nav | ⬜ |
+| 4 — QA + PXD sweep | remaining test coverage + docs across modules | ⬜ |
+| 5 — Owner-gated checklist | SEC token-hash, NOT-NULL, DR drill, Phase-7 — **needs owner** | ⬜ |
+
+**Baseline:** 218 tests green, server+client tsc clean. 7 migrations applied to Railway prod total; reply path
+byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
+
+### Scenarios on the spine (gated/opt-in)
+Reply (always on) · Website monitor (MONITOR_ENABLED) · Outbound QR drip (OUTBOUND_ENABLED) · Appointment
+booking (per-agent calendar.book) · Agentic tools (per-agent executionMode).
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 
