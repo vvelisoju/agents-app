@@ -11,6 +11,7 @@ import { getTemplate } from '../../lib/templates';
 import { validate } from '../../middleware/validate';
 import { createAgentSchema, sourceSchema } from '../../lib/schemas';
 import { normalizePhone, toWhatsappDigits } from '../../lib/phone';
+import { widgetKey } from '../../lib/widgetKey';
 
 const router = Router();
 
@@ -43,6 +44,12 @@ async function loadSources(agentId: string): Promise<Source[]> {
   const rows = await prisma.trainingSource.findMany({ where: { agentId }, orderBy: { createdAt: 'asc' } });
   return rows.map((r) => ({ id: r.id, type: r.type as any, data: JSON.parse(r.dataJson), enabled: r.enabled }));
 }
+
+// FND-54: the owner fetches the signed widget key so the website embed snippet can
+// carry it (the public endpoints reject requests without it).
+scoped.get('/widget-key', asyncHandler(async (req, res) => {
+  res.json({ key: widgetKey(agent(req).id) });
+}));
 
 scoped.get('/', asyncHandler(async (req, res) => res.json(agent(req))));
 

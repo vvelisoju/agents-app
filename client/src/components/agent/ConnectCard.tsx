@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/api';
 import { useAgentEvents } from '@/lib/ws';
 import { useToast } from '@/components/ui/toast';
@@ -26,6 +26,12 @@ export function ConnectCard({ id, agent, variant = 'full' }: { id: string; agent
     else if (type === 'status') { if (payload.status === 'connected') setQr(''); queryClient.invalidateQueries({ queryKey: agentKey }); }
   });
 
+  // FND-51: the install snippet needs the agent's signed widget key (website only).
+  const { data: widgetKeyData } = useQuery<{ key: string }>({
+    queryKey: ['/api/agents/' + id + '/widget-key'],
+    enabled: agent.channelType === 'website',
+  });
+
   const connect = useMutation({ mutationFn: () => apiRequest('POST', `/api/agents/${id}/connect`), onSuccess: () => queryClient.invalidateQueries({ queryKey: agentKey }) });
   const disconnect = useMutation({ mutationFn: () => apiRequest('POST', `/api/agents/${id}/disconnect`), onSuccess: () => { setQr(''); queryClient.invalidateQueries({ queryKey: agentKey }); } });
   const toggle = useMutation({ mutationFn: (v: boolean) => apiRequest('PATCH', `/api/agents/${id}`, { autoSend: v }), onSuccess: () => queryClient.invalidateQueries({ queryKey: agentKey }) });
@@ -33,7 +39,8 @@ export function ConnectCard({ id, agent, variant = 'full' }: { id: string; agent
   const connected = agent.status === 'connected';
   const isWebsite = agent.channelType === 'website';
   const isTelegram = agent.channelType === 'telegram';
-  const snippet = `<script src="${WIDGET_BASE}/widget.js" data-agent="${id}"></script>`;
+  const wkey = widgetKeyData?.key;
+  const snippet = `<script src="${WIDGET_BASE}/widget.js" data-agent="${id}" data-key="${wkey || ''}"></script>`;
   const copySnippet = () => { navigator.clipboard?.writeText(snippet); toast('Snippet copied', 'good'); };
   const connectTelegram = async () => {
     try { await apiRequest('PATCH', `/api/agents/${id}`, { channelConfig: { botToken: botToken.trim() } }); connect.mutate(); }
@@ -43,8 +50,14 @@ export function ConnectCard({ id, agent, variant = 'full' }: { id: string; agent
   const SnippetBlock = () => (
     <div className="rounded-lg border border-border p-3">
       <p className="mb-2 text-sm text-muted-foreground">Add this one line just before <code>&lt;/body&gt;</code> on your website:</p>
-      <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs">{snippet}</pre>
-      <Button size="sm" variant="ghost" className="mt-2" onClick={copySnippet}><Copy size={14} /> Copy snippet</Button>
+      {wkey ? (
+        <>
+          <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs">{snippet}</pre>
+          <Button size="sm" variant="ghost" className="mt-2" onClick={copySnippet}><Copy size={14} /> Copy snippet</Button>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">Preparing your install snippet…</p>
+      )}
     </div>
   );
 

@@ -2,9 +2,17 @@
 // so every test reads the same shape and future schema changes touch one file.
 import { Prisma } from '@prisma/client';
 import prisma from '../../src/lib/prisma';
+import { newToken } from '../../src/middleware/auth';
 
 export function createOrg(name = 'Test Org') {
   return prisma.org.create({ data: { name } });
+}
+
+let userSeq = 0;
+/** A user with a bearer token, for auth-scoped tests (WS, RBAC, …). */
+export function createUser(orgId: string, role = 'owner') {
+  const phone = '9' + (String(Date.now()).slice(-6) + String(userSeq++).padStart(3, '0')).slice(-9);
+  return prisma.user.create({ data: { orgId, phone, passwordHash: 'x', token: newToken(), role } });
 }
 
 /** Create an agent (defaults to the capturing 'test' channel) + an empty TrainingProfile. */

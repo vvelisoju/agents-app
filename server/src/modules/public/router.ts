@@ -4,6 +4,8 @@ import { Router } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { processInbound } from '../../engine/engine';
+import { verifyWidgetKey } from '../../lib/widgetKey';
+import { allow } from '../../lib/rateLimiter';
 
 const router = Router();
 
@@ -12,10 +14,18 @@ async function websiteAgent(agentId: string) {
   return agent && agent.channelType === 'website' ? agent : null;
 }
 
-// Visitor sends a message.
+// FND-12: every widget request must carry the agent's signed key (?key=…).
+function keyOk(req: any, agentId: string): boolean {
+  return verifyWidgetKey(agentId, String(req.query.key || ''));
+}
+
+// Visitor sends a message. Each send triggers a model call, so it is both key-gated
+// (FND-12) and per-agent rate-capped (FND-13) to stop unbounded Claude spend.
 router.post('/widget/:agentId/message', asyncHandler(async (req, res) => {
   const agent = await websiteAgent(String(req.params.agentId));
   if (!agent) return res.status(404).json({ error: 'not found' });
+  if (!keyOk(req, agent.id)) return res.status(401).json({ error: 'invalid widget key' });
+  if (!allow('widget:msg:' + agent.id, 20, 60_000)) return res.status(429).json({ error: 'too many messages, slow down' });
   const { contactId, name, text } = req.body || {};
   if (!contactId || !String(text || '').trim()) return res.status(400).json({ error: 'contactId and text required' });
   const result = await processInbound(agent.id, { from: 'web:' + contactId, contactName: name || 'Website visitor', text: String(text) });
@@ -28,6 +38,8 @@ router.post('/widget/:agentId/message', asyncHandler(async (req, res) => {
 router.get('/widget/:agentId/messages', asyncHandler(async (req, res) => {
   const agent = await websiteAgent(String(req.params.agentId));
   if (!agent) return res.status(404).json({ error: 'not found' });
+  if (!keyOk(req, agent.id)) return res.status(401).json({ error: 'invalid widget key' });
+  if (!allow('widget:poll:' + agent.id, 120, 60_000)) return res.status(429).json({ error: 'too many requests' });
   const contactId = String(req.query.contactId || '');
   if (!contactId) return res.status(400).json({ error: 'contactId required' });
   const conv = await prisma.conversation.findUnique({ where: { agentId_contactNumber: { agentId: agent.id, contactNumber: 'web:' + contactId } } });
