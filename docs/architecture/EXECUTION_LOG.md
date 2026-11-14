@@ -138,13 +138,28 @@ STU-30/32 flip) · STU-6 collapse NL pipeline stages · STU-27..35 richer draft-
 
 **173 tests green, tsc clean, no regression. 3 migrations safely applied to Railway prod this session.**
 
+### Phase 5 — Outbound QR drip (DONE, gated by OUTBOUND_ENABLED)
+| Task | Status | Notes |
+|---|---|---|
+| SCN-05 outbound data model | ✅ | OutboundConnection/OutboundSendLog/OutboundOptOut + migration **on prod**. Ledger (connection,campaign,recipient) unique = send idempotency; opt-out (agent,phone) unique; encrypted token column. |
+| SCN-07 per-agent send mutex | ✅ | `lib/sendMutex.ts` — FIFO per agent, concurrent across agents. |
+| SCN-10 STOP opt-out loop | ✅ | `lib/optout.ts` (conservative multilingual matcher) + `engine.ts` pre-check gated by OUTBOUND_ENABLED (off → byte-for-byte): suppress + confirm once + no AI reply. |
+| SCN-09/12/18 drip handler | ✅ | `workflow/handlers/outboundDrip.ts` — one send/tick then sleep(jitter); per-send gates: window, warmup cap from ledger (restart-safe), budget, opt-out, ledger idempotency; mandatory STOP footer. |
+| SCN-11/40 approval-gated start + API | ✅ | `modules/outbound/` + `/api/agents/:id/outbound/*` — connection upsert (encrypted token, risk-ack to activate), campaign start (parked run + bulk_send Approval → sends nothing until approved via EWS-19), ledger progress, opt-out list/remove. |
+| SCN-16/17 console | ✅ | Client `CampaignsPanel` (Campaigns tab, flag-gated): risk-consent → enable → compose+recipients → start (needs approval) → live progress. |
+| SCN-19 tests | ✅ | `tests/outbound.test.ts` (7) + `tests/outboundDrip.test.ts` (9). **189 total green, tsc clean.** |
+
 ### Phase 5 — remaining
-EWS-22 spine metrics · EWS-33/34 retention sweeps + shared maintenance ticker · EWS-30/31 docs + pg-boss
-decision · EWS-32 inbound-durability ADR. **SCN outbound QR drip** (SCN-05..19 — OutboundConnection/SendLog/
-OptOut model, Trackly connector, drip handler w/ cap/window/jitter/warmup/mutex, STOP opt-out, approval-gated
-start, console) and **SCN appointment booking** (SCN-20..25 — Booking model, calendar.book tool on the agentic
-path, approve-before-book, double-book guard, booking view) — both land on the now-proven spine. SCN-37 scenario
-picker · SCN-01 channel-aware reply prompt.
+SCN-06 sendMedia (image promos) + message_ack → delivered/read ledger sync (SCN-14) · SCN-08 Trackly HTTP
+connector (recipients currently come from the owner's own list — self-contained; Trackly becomes an optional
+source) · SCN-15 BROADCAST-exclusion guard/test · SCN-39 ban-risk matrix doc · SCN-37 scenario picker · SCN-38
+feature-gated sidebar nav (Campaigns/Monitors are agent-detail tabs today) · SCN-01 channel-aware reply prompt ·
+SCN-32/33/35 shared cross-agent lead record. EWS-22 metrics · EWS-33/34 retention sweeps · EWS-30/31 docs +
+pg-boss decision · EWS-32 inbound-durability ADR.
+
+### Phase 6 (not started) — the remaining big build
+Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). **Appointment booking**
+(SCN-20..25) lands here because `calendar.book` is a registry tool on the agentic path.
 
 ### Phases 6 (not started)
 Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). Booking's calendar.book tool
