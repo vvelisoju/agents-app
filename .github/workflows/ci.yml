@@ -69,3 +69,48 @@ jobs:
             echo "::error::prisma/schema.postgres.prisma is stale — run npm run db:gen-pg and commit."
             exit 1
           }
+
+  # QA-13: prove every committed migration applies cleanly on a real Postgres (the dev/test
+  # suite runs on SQLite, so dialect drift in a migration would otherwise only surface in prod).
+  postgres-migrations:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: agents_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/agents_ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      # Fresh DB → apply the full migration history (0_init onward) against Postgres.
+      - run: npx prisma migrate deploy --schema prisma/schema.postgres.prisma
+      # Then the recorded history must report up to date (no drift, no pending).
+      - run: npx prisma migrate status --schema prisma/schema.postgres.prisma
+
+  # QA-14: fail the build if a secret (key, token, credential) is committed.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the scan covers the pushed range
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
