@@ -75,6 +75,43 @@ scoped.get('/widget-key', asyncHandler(async (req, res) => {
   res.json({ key: widgetKey(agent(req).id) });
 }));
 
+// TOOL-15 — tool catalog + this agent's selection. GET returns every registered tool with a
+// friendly outcome label, side-effect class, whether it needs approval, and enabled flag.
+scoped.get('/tools', asyncHandler(async (req, res) => {
+  const { listTools } = await import('../../tools/registry');
+  const enabled = new Set(parseEnabledTools(agent(req)));
+  res.json({
+    executionMode: agent(req).executionMode,
+    tools: listTools().map((t) => ({
+      name: t.name,
+      description: t.description,
+      sideEffect: t.sideEffect,
+      needsApproval: t.sideEffect !== 'read',
+      enabled: enabled.has(t.name),
+    })),
+  });
+}));
+
+// PUT the selection. Enabling ≥1 tool can flip the agent to 'agentic'; clearing all reverts to
+// 'reply' (byte-for-byte). Owner/train_edit gated.
+scoped.put('/tools', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { listTools } = await import('../../tools/registry');
+  const known = new Set(listTools().map((t) => t.name));
+  const requested = Array.isArray(req.body?.tools) ? req.body.tools.filter((n: unknown) => typeof n === 'string' && known.has(n)) : [];
+  const executionMode = requested.length ? 'agentic' : 'reply';
+  const updated = await prisma.agent.update({
+    where: { id: agent(req).id },
+    data: { enabledToolsJson: JSON.stringify(requested), executionMode },
+  });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.tools_update', targetType: 'agent', targetId: agent(req).id, metadata: { tools: requested, executionMode } });
+  res.json({ ok: true, tools: requested, executionMode: updated.executionMode });
+}));
+
+function parseEnabledTools(a: any): string[] {
+  try { const x = JSON.parse(a.enabledToolsJson || '[]'); return Array.isArray(x) ? x.filter((v) => typeof v === 'string') : []; }
+  catch { return []; }
+}
+
 // EWS-18 — this agent's workflow runs (org + agent scoped).
 scoped.get('/workflows', asyncHandler(async (req, res) => {
   const { listRuns } = await import('../workflows/service');

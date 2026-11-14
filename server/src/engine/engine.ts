@@ -14,6 +14,13 @@ import { InboundMessage } from '../channels/types';
 import { outboundEnabled } from '../lib/spineEnv';
 import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
 import { withSendLock } from '../lib/sendMutex';
+import { runAgenticLoop } from './agentic';
+
+// TOOL-14: an agent's enabled tool allowlist (JSON string[]), empty by default.
+function parseEnabledTools(agent: any): string[] {
+  try { const a = JSON.parse(agent.enabledToolsJson || '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []; }
+  catch { return []; }
+}
 
 // Don't re-ping the owner about the same lead more than once per this window.
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -200,9 +207,26 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
 
   let draft: string;
   let model!: Awaited<ReturnType<typeof generate>>;
+  // TOOL-05/14: the agentic tool loop is a sibling path, taken ONLY when the owner put the agent
+  // in 'agentic' mode AND enabled at least one tool. Otherwise this is byte-for-byte the single
+  // Haiku call. The deterministic post-processing below (NEEDS_HUMAN / [[ALERT]] / {{LINK}}) is
+  // identical for both paths (TOOL-06).
+  const enabledTools = parseEnabledTools(agent);
+  const agentic = agent.executionMode === 'agentic' && enabledTools.length > 0;
   try {
-    model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
-    draft = model.text;
+    if (agentic) {
+      const r = await runAgenticLoop({
+        system,
+        userText: history || `Customer: ${text}`,
+        enabledTools,
+        ctx: { agent, orgId: agent.orgId, conversationId: conv.id, executionId },
+      });
+      draft = r.text;
+      model = { text: r.text, model: r.model, provider: r.provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, latencyMs: 0, stopReason: 'end_turn', refused: false };
+    } else {
+      model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
+      draft = model.text;
+    }
   } catch (e: any) {
     console.error('Claude error:', e?.message || e);
     writeTrace({ orgId: agent.orgId, agentId, executionId, conversationId: conv.id, outcome: 'error', errorCode: 'model_error' });

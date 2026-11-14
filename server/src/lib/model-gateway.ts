@@ -7,6 +7,19 @@
 // needs a migration (blocked on DB-1); callModel already returns it so that lands cleanly.
 import Anthropic from '@anthropic-ai/sdk';
 
+// TOOL-04 — an Anthropic tool definition (name + JSON-Schema input).
+export interface AnthropicTool {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
 export interface ModelCallInput {
   system: string;
   prompt?: string; // convenience for a single user turn
@@ -15,6 +28,7 @@ export interface ModelCallInput {
   maxTokens?: number;
   effort?: 'low' | 'medium' | 'high';
   provider?: 'anthropic';
+  tools?: AnthropicTool[]; // TOOL-04: when omitted the request is byte-for-byte today's
 }
 
 export interface ModelCallResult {
@@ -26,6 +40,10 @@ export interface ModelCallResult {
   latencyMs: number;
   stopReason: string | null;
   refused: boolean;
+  /** Raw assistant content blocks (needed to append to messages for a tool-use follow-up). */
+  content?: any[];
+  /** Parsed tool_use blocks when stop_reason === 'tool_use'. */
+  toolCalls?: ToolCall[];
 }
 
 const DEFAULT_MODEL = process.env.AGENT_MODEL || 'claude-haiku-5-5';
@@ -67,13 +85,19 @@ export async function callModel(input: ModelCallInput): Promise<ModelCallResult>
           system: input.system,
           output_config: { effort: input.effort || 'low' },
           messages,
+          // Only attach tools when the caller passes them → the no-tools request is unchanged.
+          ...(input.tools?.length ? { tools: input.tools } : {}),
         } as any,
         { timeout: TIMEOUT_MS } as any,
       );
       const refused = res.stop_reason === 'refusal';
+      const content = res.content || [];
       const text = refused
         ? ''
-        : (res.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+        : content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+      const toolCalls: ToolCall[] = content
+        .filter((b: any) => b.type === 'tool_use')
+        .map((b: any) => ({ id: b.id, name: b.name, input: b.input || {} }));
       return {
         text,
         model,
@@ -83,6 +107,8 @@ export async function callModel(input: ModelCallInput): Promise<ModelCallResult>
         latencyMs: Date.now() - start,
         stopReason: res.stop_reason ?? null,
         refused,
+        content,
+        toolCalls,
       };
     } catch (err) {
       lastErr = err;

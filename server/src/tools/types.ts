@@ -35,6 +35,12 @@ export interface Tool<I = any, O = any> {
 
 export type ToolErrorCode = 'invalid_input' | 'invalid_output' | 'timeout' | 'denied' | 'pending_approval' | 'error';
 
-export type ToolResult =
-  | { ok: true; output: unknown }
-  | { ok: false; code: ToolErrorCode; error: string; approvalId?: string };
+// Flat shape (not a discriminated union) so callers read fields without relying on narrowing.
+// On success `output` is set; on failure `code`/`error` (and `approvalId` for a gated tool) are.
+export interface ToolResult {
+  ok: boolean;
+  output?: unknown;
+  code?: ToolErrorCode;
+  error?: string;
+  approvalId?: string;
+}
