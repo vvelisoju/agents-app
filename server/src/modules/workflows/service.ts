@@ -7,6 +7,7 @@ import prisma from '../../lib/prisma';
 import { audit } from '../../lib/audit';
 import { enqueueJob } from '../../jobs/enqueue';
 import { decideApproval } from '../../policy/approvals';
+import { emit as wsEmit } from '../../lib/realtime';
 
 const TERMINAL = ['completed', 'failed', 'canceled'];
 const ACTIVE = ['running', 'sleeping'];
@@ -54,6 +55,8 @@ async function transition(run: WorkflowRun, status: string, userId: string, step
   });
   await prisma.workflowStepLog.create({ data: { runId: run.id, stepName: step, result: 'control', detailJson: JSON.stringify({ by: userId }) } });
   audit({ orgId: run.orgId, actorUserId: userId, action: `workflow.${step}`, targetType: 'workflow_run', targetId: run.id });
+  // EWS-26: push a live run-status update to any subscribed browser (keyed by the run's agent).
+  if (run.agentId) { try { wsEmit(run.agentId, 'workflow', { runId: run.id, status }); } catch { /* never block a control */ } }
   return updated;
 }
 

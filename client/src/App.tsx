@@ -8,6 +8,7 @@ import { Forgot } from '@/pages/Forgot';
 import { Agents } from '@/pages/Agents';
 import { AgentDetail } from '@/pages/AgentDetail';
 import { Inbox } from '@/pages/Inbox';
+import { Automations } from '@/pages/Automations';
 import { Leads } from '@/pages/Leads';
 import { Settings } from '@/pages/Settings';
 import { Subscription } from '@/pages/Subscription';
@@ -35,6 +36,7 @@ export function App() {
         <Route path="/agents/:id">{(p) => <AgentDetail id={(p as any)?.id || ''} />}</Route>
         <Route path="/agents" component={Agents} />
         <Route path="/inbox" component={Inbox} />
+        <Route path="/automations" component={Automations} />
         <Route path="/leads" component={Leads} />
         <Route path="/settings" component={Settings} />
         <Route path="/subscription" component={Subscription} />
