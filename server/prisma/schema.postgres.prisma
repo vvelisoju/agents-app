@@ -285,6 +285,29 @@ model ConnectedAccount {
   @@index([agentId])
 }
 
+// ─── LKD-1: LinkedIn agent — approval-gated actions executed by the owner's browser worker ───
+// The owner (or the agent, from the owner's instructions) drafts an action; it waits in
+// 'pending_approval'; the owner approves; the worker on the owner's machine claims it
+// ('executing') and drives the logged-in browser, then records 'done' or 'failed'. See
+// docs/LINKEDIN_AGENT_PLAN.md.
+model LinkedInAction {
+  id          String    @id @default(uuid())
+  orgId       String
+  agentId     String
+  kind        String // post | comment | reshare
+  status      String    @default("pending_approval") // pending_approval | approved | executing | done | failed | cancelled
+  payloadJson String // {text} | {postUrl,text} | {postUrl,caption?}
+  resultJson  String? // {url?} on success
+  error       String?
+  approvedAt  DateTime?
+  executedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+  @@index([status])
+}
+
 // ─── Phase 5: Event / Trigger / Workflow spine (all gated behind WORKFLOW_ENABLED) ───
 
 // EWS-01 — transactional outbox (CloudEvents field-shape). NOT a broker: a dispatcher

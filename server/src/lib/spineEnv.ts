@@ -27,6 +27,15 @@ export function memoryEnabled(): boolean {
   return v === '1' || v === 'true';
 }
 
+// LKD-1 — LinkedIn browser agent master flag, default off. With it off the LinkedIn adapter is a
+// coming-soon catalog tile only and no browser worker / action ever runs. See
+// docs/LINKEDIN_AGENT_PLAN.md. This is owner-operated browser automation (no LinkedIn API) and
+// every outbound action is approval-gated.
+export function linkedinEnabled(): boolean {
+  const v = process.env.LINKEDIN_ENABLED;
+  return v === '1' || v === 'true';
+}
+
 export function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || '';
   // The dev/test datasource is SQLite (file:...); everything else is Postgres.

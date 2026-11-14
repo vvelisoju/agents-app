@@ -9,6 +9,7 @@ import analyticsRouter from './modules/analytics/router';
 import approvalsRouter from './modules/approvals/router';
 import workflowsRouter from './modules/workflows/router';
 import connectorsRouter from './modules/connectors/router';
+import linkedinRouter from './modules/linkedin/router';
 import transcribeRouter from './modules/transcribe/router';
 import prisma from './lib/prisma';
 import { authMiddleware } from './middleware/auth';
@@ -79,6 +80,7 @@ export function registerRoutes(app: Express) {
   app.use('/api/approvals', authMiddleware, approvalsRouter);
   app.use('/api/workflows', authMiddleware, workflowsRouter);
   app.use('/api/connectors', authMiddleware, connectorsRouter);
+  app.use('/api/linkedin', authMiddleware, linkedinRouter);
   // Voice-to-text: proxy a short recording to the ASR service (key stays server-side).
   app.use('/api/transcribe', authMiddleware, transcribeRouter);
 

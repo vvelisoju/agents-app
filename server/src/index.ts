@@ -8,6 +8,7 @@ import { attachWs } from './lib/realtime';
 import { assertProdSecrets } from './lib/env';
 import './channels/whatsapp'; // register the WhatsApp adapter
 import * as wa from './channels/whatsapp';
+import './channels/linkedin'; // LKD-1: register the LinkedIn adapter (coming-soon tile until Wave 1)
 import { startSpine, stopSpine } from './jobs/spine'; // EWS-14: Phase-5 spine (gated by WORKFLOW_ENABLED)
 import './workflow/handlers'; // register built-in workflow handlers (scheduled-monitor, …)
 import './lib/retention'; // EWS-33/OBS-18/POL-17: register retention sweeps on the shared ticker
