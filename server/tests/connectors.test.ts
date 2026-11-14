@@ -38,6 +38,17 @@ describe('connector management API', () => {
     expect(await prisma.connector.count({ where: { id: c.body.id } })).toBe(0);
   });
 
+  it('test endpoint validates a REST connector config', async () => {
+    const org = await createOrg();
+    const token = (await createUser(org.id, 'owner')).token;
+    const c = await request(app).post('/api/connectors').set(auth(token)).send({ name: 'api', kind: 'rest', secret: JSON.stringify({ baseUrl: 'https://api.example.com' }) });
+    const ok = await request(app).post(`/api/connectors/${c.body.id}/test`).set(auth(token));
+    expect(ok.status).toBe(200);
+    expect(ok.body.ok).toBe(true);
+    const bad = await request(app).post('/api/connectors').set(auth(token)).send({ name: 'api2', kind: 'rest', secret: JSON.stringify({ baseUrl: 'not-a-url' }) });
+    expect((await request(app).post(`/api/connectors/${bad.body.id}/test`).set(auth(token))).body.ok).toBe(false);
+  });
+
   it('forbids a member from creating a connector', async () => {
     const org = await createOrg();
     const member = (await createUser(org.id, 'member')).token;

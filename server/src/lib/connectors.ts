@@ -91,6 +91,25 @@ export async function runConnectorOp(connector: any, op: any, params: Record<str
   }
 }
 
+// Validate a connection before the owner wires operations onto it: a trivial probe (SELECT 1 for
+// DB; a base-URL sanity check for REST). Never returns the secret or a raw driver error.
+export async function testConnector(connector: any): Promise<{ ok: boolean; error?: string }> {
+  const secret = decryptSecret(connector.secretEnc);
+  try {
+    if (connector.kind === 'postgres') { await runPg(secret, 'SELECT 1', []); return { ok: true }; }
+    if (connector.kind === 'mysql') { await runMysql(secret, 'SELECT 1', []); return { ok: true }; }
+    if (connector.kind === 'rest') {
+      const cfg = JSON.parse(secret || '{}');
+      if (!cfg.baseUrl || !/^https?:\/\//i.test(String(cfg.baseUrl))) return { ok: false, error: 'baseUrl must be an http(s) URL' };
+      return { ok: true };
+    }
+    return { ok: false, error: `unknown connector kind: ${connector.kind}` };
+  } catch (e: any) {
+    log.warn('connector test failed', { kind: connector.kind, error: String(e?.message || e) });
+    return { ok: false, error: 'could not connect — check the connection string and that the host is reachable' };
+  }
+}
+
 // Operations an agent may invoke, filtered by its access level (customer sees customer ops; an
 // admin agent sees both) and side-effect (read vs write tool).
 export async function opsForAgent(orgId: string, access: string, sideEffect: 'read' | 'write') {

@@ -1,5 +1,6 @@
 // Connector management API — owner-only (credentials). Secrets are write-only (never returned).
 import { Router } from 'express';
+import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { requirePermission } from '../../middleware/authz';
 import { audit } from '../../lib/audit';
@@ -28,6 +29,13 @@ router.delete('/:id', gate, asyncHandler(async (req, res) => {
   if (!ok) return res.status(404).json({ error: 'not found' });
   audit({ orgId: u(req).orgId, actorUserId: u(req).id, action: 'connector.delete', targetType: 'connector', targetId: String(req.params.id) });
   res.json({ ok: true });
+}));
+
+router.post('/:id/test', gate, asyncHandler(async (req, res) => {
+  const connector = await prisma.connector.findFirst({ where: { id: String(req.params.id), orgId: u(req).orgId } });
+  if (!connector) return res.status(404).json({ error: 'not found' });
+  const { testConnector } = await import('../../lib/connectors');
+  res.json(await testConnector(connector));
 }));
 
 router.get('/:id/ops', asyncHandler(async (req, res) => {
