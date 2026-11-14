@@ -27,14 +27,16 @@ export async function createAgent(
   return agent;
 }
 
-export function addSource(
+export async function addSource(
   agentId: string,
   type: 'fact' | 'link' | 'faq',
   data: Record<string, unknown>,
   enabled = true,
 ) {
+  // Mirror the real write path (agents router), which stamps orgId for tenant scoping.
+  const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { orgId: true } });
   return prisma.trainingSource.create({
-    data: { agentId, type, dataJson: JSON.stringify(data), enabled },
+    data: { agentId, orgId: agent?.orgId ?? null, type, dataJson: JSON.stringify(data), enabled },
   });
 }
 
