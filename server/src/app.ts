@@ -23,6 +23,10 @@ export function corsOriginFor(corsEnv: string | undefined, isProd: boolean): str
 
 export function buildApp() {
   const app = express();
+  // Behind Railway's proxy the real client IP is in X-Forwarded-For; trust the first hop so
+  // express-rate-limit keys on the actual client (not the proxy) and stops logging a
+  // ValidationError. One hop only — do not blindly trust the whole chain.
+  app.set('trust proxy', 1);
   app.use(helmet());
   const corsOrigin = corsOriginFor(process.env.CORS_ORIGIN, process.env.NODE_ENV === 'production');
   app.use(cors({ origin: corsOrigin, credentials: true }));
