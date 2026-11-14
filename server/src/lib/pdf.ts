@@ -12,7 +12,14 @@ export interface PdfExtract {
 }
 
 export async function extractPdfText(buffer: Buffer): Promise<PdfExtract> {
-  const data = await pdfParse(buffer);
+  let data;
+  try {
+    data = await pdfParse(buffer);
+  } catch {
+    // pdfjs surfaces technical errors ('bad XRef entry', encryption, etc.) — give the owner a
+    // readable one instead.
+    throw new Error("We couldn't read that PDF — it may be corrupted, password-protected, or a scanned image. Try a different file.");
+  }
   const text = (data.text || '').replace(/\u0000/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   const title = typeof data.info?.Title === 'string' ? (data.info.Title as string) : undefined;
   return { text: text.slice(0, MAX_CHARS), pages: data.numpages || 0, title };

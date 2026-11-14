@@ -211,7 +211,33 @@ the approvals/insights/connected-accounts surfaces. What remains is **not more a
   until a tenant KB outgrows the prompt budget. Plus the §7 "triggered" scale-out items (pg-boss, 2nd replica).
 - **Intentionally skipped (dead-end / redundant):** connected-accounts UI (store is empty in normal use — the
   API is ready when populated), SCN-37 scenario picker (per-scenario tabs already exist), SCN-32/33/35 shared
-  cross-agent lead record (the Leads page already aggregates org-wide). 7 migrations applied to Railway prod total; reply path
+  cross-agent lead record (the Leads page already aggregates org-wide).
+
+## Production deployment + live testing (merged to `main`, deployed to Railway)
+
+Merged `feat/agentic-platform` → `main` (54 commits) and deployed. **Three deploy-blocking bugs fixed via live
+diagnosis** (Railway CLI logs + reproduction):
+1. **Missing prod secrets** — `ENCRYPTION_KEY`/`WIDGET_SIGNING_SECRET` never set on Railway (assertProdSecrets
+   fail-fast). Generated + set them.
+2. **WhatsApp crash loop** (`9433dd6`) — stale Chromium `SingletonLock` on the `/data` volume → "Can't open
+   display" → uncaught rejection → process exit. Fixed: clear the lock before launch, catch `initialize()`,
+   add process-level `unhandledRejection`/`uncaughtException` guards (a channel failure can never down the API).
+3. **Agentic tool-name 400** (`5bd8fe3`) — the Anthropic tools API forbids dots in tool names; the registry
+   uses `calendar.book` etc. Unit tests mocked the API so it never surfaced. Fixed: encode `.`→`__` on the wire,
+   decode the model's tool call back. Also fixed the **memory completeness gap** (`27193ae`) — the prompt never
+   told the model it could `[[REMEMBER]]`, so MEMORY_ENABLED did nothing.
+
+**Live-verified on prod** (as the owner's account, test data cleaned up): login · reply engine · training→reply ·
+website monitor (live spine fetched the page) · tools list/enable · agentic loop · `calendar.book` → approval
+gate (nothing booked) → approve → confirmed Booking · memory recall · WhatsApp agent reconnected. Flags live:
+WORKFLOW/MONITOR/MEMORY on, OUTBOUND off.
+
+## New scope (beyond the 512-task backlog)
+| Item | Status |
+|---|---|
+| **PDF/document ingestion** | ✅ `lib/pdf.ts` + `learnFromText` refactor + `POST /training/learn-document` (raw PDF → extract → condense into a training draft) + client "Upload a PDF". Live-verified with a real PDF. |
+| **RAG (vector search)** | ⏸️ needs an embeddings provider + API key (Anthropic has none). To build provider-pluggable + pgvector; keyword `knowledge.search` is the fallback until a key is set. |
+| **Custom DB/API connector** | ⏸️ needs the owner to define the concrete use case (a registry tool). | 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)

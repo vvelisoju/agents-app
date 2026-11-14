@@ -15,7 +15,10 @@ import request from 'supertest';
 import { buildApp } from '../src/app';
 import { askClaude } from '../src/lib/brain';
 import { extractPdfText } from '../src/lib/pdf';
+import pdfParse from 'pdf-parse';
 import { createOrgWithAgent, createUser } from './helpers/factories';
+
+const mockPdf = vi.mocked(pdfParse);
 
 const app = buildApp();
 const ask = vi.mocked(askClaude);
@@ -29,6 +32,11 @@ describe('PDF text extraction', () => {
     expect(r.text).toContain('hot desks');
     expect(r.pages).toBe(2);
     expect(r.title).toBe('Brochure');
+  });
+
+  it('turns a pdfjs failure into a friendly error', async () => {
+    mockPdf.mockRejectedValueOnce(new Error('bad XRef entry'));
+    await expect(extractPdfText(Buffer.from('%PDF-corrupt'))).rejects.toThrow(/couldn't read that PDF/);
   });
 });
 
