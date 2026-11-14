@@ -13,6 +13,8 @@ import { createAgentSchema, sourceSchema } from '../../lib/schemas';
 import { normalizePhone, toWhatsappDigits } from '../../lib/phone';
 import { widgetKey } from '../../lib/widgetKey';
 import { encryptSecret, isEncrypted } from '../../lib/crypto';
+import { requirePermission } from '../../middleware/authz';
+import { audit } from '../../lib/audit';
 
 const router = Router();
 
@@ -87,10 +89,11 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   res.json(updated);
 }));
 
-scoped.delete('/', asyncHandler(async (req, res) => {
+scoped.delete('/', requirePermission('agent_delete'), asyncHandler(async (req, res) => {
   const adapter = getAdapter(agent(req).channelType);
   if (adapter?.stop) await adapter.stop(agent(req).id).catch(() => {});
   await prisma.agent.delete({ where: { id: agent(req).id } });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'agent.delete', targetType: 'agent', targetId: agent(req).id, ip: req.ip });
   res.json({ ok: true });
 }));
 

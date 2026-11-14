@@ -8,6 +8,8 @@ import billingRouter from './modules/billing/router';
 import analyticsRouter from './modules/analytics/router';
 import prisma from './lib/prisma';
 import { authMiddleware } from './middleware/auth';
+import { requirePermission } from './middleware/authz';
+import { audit } from './lib/audit';
 import { asyncHandler } from './middleware/asyncHandler';
 import { TEMPLATES } from './lib/templates';
 
@@ -42,10 +44,19 @@ export function registerRoutes(app: Express) {
     const org = await prisma.org.findUnique({ where: { id: (req as any).user.orgId }, include: { subscription: true } });
     res.json({ id: org?.id, name: org?.name, plan: org?.subscription?.plan, maxAgents: org?.subscription?.maxAgents });
   }));
-  app.patch('/api/org', authMiddleware, asyncHandler(async (req, res) => {
+  app.patch('/api/org', authMiddleware, requirePermission('org_admin'), asyncHandler(async (req, res) => {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ error: 'name required' });
     const org = await prisma.org.update({ where: { id: (req as any).user.orgId }, data: { name } });
+    audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'org.rename', metadata: { name }, ip: req.ip });
     res.json({ id: org.id, name: org.name });
+  }));
+
+  // POL-15: owner-only audit trail.
+  app.get('/api/audit', authMiddleware, requirePermission('audit_view'), asyncHandler(async (req, res) => {
+    const rows = await prisma.auditLog.findMany({
+      where: { orgId: (req as any).user.orgId }, orderBy: { createdAt: 'desc' }, take: 100,
+    });
+    res.json({ events: rows });
   }));
 }

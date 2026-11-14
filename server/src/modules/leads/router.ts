@@ -3,6 +3,8 @@
 import { Router } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { requirePermission } from '../../middleware/authz';
+import { audit } from '../../lib/audit';
 
 const router = Router();
 const orgOf = (req: any) => req.user.orgId;
@@ -20,7 +22,8 @@ router.get('/', asyncHandler(async (req, res) => {
   })));
 }));
 
-router.get('/export', asyncHandler(async (req, res) => {
+router.get('/export', requirePermission('lead_export'), asyncHandler(async (req, res) => {
+  audit({ orgId: orgOf(req), actorUserId: (req as any).user.id, action: 'lead.export', ip: req.ip });
   const convs = await prisma.conversation.findMany({
     where: { orgId: orgOf(req) }, orderBy: { lastMessageAt: 'desc' },
     include: { agent: { select: { name: true } } },
