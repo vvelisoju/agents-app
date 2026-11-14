@@ -40,12 +40,28 @@ main untouched. Remaining Phase-0 items are low-risk polish (FND-50/51 UX alread
 'unauthorized' handling; FND-02/03/05 further doc reconciliation; FND-52/53 finish) — can trail Phase 1.
 FND-31 token capture folded into Phase 2 (MGW-1/OBS-3).
 
-### Phase 1 — BLOCKED on owner decision/resource (see decision-log.md DB-1)
-Migrations require: (1) a **Postgres instance for dev/test** (cutting the schema to `postgresql` breaks the
-SQLite test suite until one exists — docker-compose defines one); (2) a **structural shadow clone of the live
-prod DB** to diff the baseline against, or approval to generate the baseline and `migrate resolve` it on prod
-in a deploy window (DB-2/3/4). No prod change made. **Next once unblocked:** DB-1→DB-5 migration baseline,
-then DB-7..10 orgId backfills (rehearsed per DB-24).
+### Phase 1 — Migrations & tenant-data hardening (core DONE, applied to prod)
+Owner authorized using the Railway DB directly. Resolved **DB-1** (SQLite for tests/dev via `schema.prisma`;
+generated `schema.postgres.prisma` for prod + migrations — no local Postgres available).
+
+| Task | Status | Notes |
+|---|---|---|
+| DB-1/3/4/5/20 migration baseline | ✅ | `0_init` generated + **marked applied on live prod** via `migrate resolve` (prod already matched schema exactly). Entrypoint → `migrate deploy`; Dockerfile drops the sed; `db:gen-pg`/`migrate:*` scripts. |
+| DB-7..12 orgId + indexes | ✅ | Nullable `orgId` on ChannelSession/TrainingProfile/TrainingSource/Message + backfill from agent; indexes incl. Message(conversationId,createdAt), UsageEvent(orgId,createdAt). **Applied to Railway prod** via a reviewed migration (additive + backfill, no data loss). Write sites populate orgId. |
+| DB-13 tenant-scope test | ✅ | `tests/tenancy.test.ts`. |
+| QA-12 / pg-schema-sync CI guards | ✅ | CI fails on any destructive prod schema op or stale pg schema. |
+
+**80 tests green, tsc clean.** The destructive `db push --accept-data-loss`-on-boot is GONE; prod now evolves
+via reviewed migrations with history. 14 commits on `feat/agentic-platform`.
+
+### Phase 1 — remaining (lower-risk / owner)
+DB-14 tenant-scope helper (apply orgId filters to by-id reads) · DB-15 seed · DB-16 dev-reset · DB-18 divergence
+doc · DB-21 perf check · DB-22 doc reconcile · QA-57 backfill-correctness test · **NOT NULL enforcement** on the
+new orgId columns (after DB-24 prod-scale rehearsal — owner) · DB-17/QA-48 DR restore drill (owner).
+
+### Phase 2 — now UNBLOCKED (migrations work)
+Model gateway ✅ (done, migration-independent). Next: extend `UsageEvent` → execution-trace row (OBS-1) +
+`Agent.executionMode` (MGW-4) as a migration; budget gate (MGW-10/11); pino logging; runtime facade.
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 
