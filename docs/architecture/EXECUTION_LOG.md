@@ -91,9 +91,26 @@ sessions (mass re-login) on the running business, so it needs a coordinated main
 `lib/tokenAuth.ts`) is ready. · SEC-9 migrate Telegram botToken into ConnectedAccount · POL-10/11/16/20 approval
 executors + client Approvals inbox UI.
 
-### Phases 4–6 (not started) — feature build
-Agent Spec + versioning + **Creation Studio** (the north-star), event/trigger/workflow spine + outbound (Trackly
-QR drip), tools + agentic loop, memory/RAG, and the broad client UX layer. Large multi-session work.
+### Phase 4 — Agent Spec, versioning & Creation Studio (BACKEND core DONE)
+| Task | Status | Notes |
+|---|---|---|
+| SPEC-1 AgentVersion migration | ✅ | AgentVersion + currentVersionId + lifecycleStatus (backfilled) **on prod**. |
+| SPEC-2..5/27 agentSpec.ts | ✅ | zod AgentSpec + specFromAgent/applySpec round-trip; channel secrets stripped. |
+| SPEC-13..19 versioning endpoints | ✅ | GET /spec, apply-spec, publish /versions, GET /versions, **rollback**, clone, lifecycle — policy-gated + audited. |
+| STU-5/7 NL builder | ✅ | lib/agentBuilder.ts generateSpecFromNL → validated draft; POST /api/agents/build (budget-gated, SSRF-safe). |
+| STU-16/17 channel catalog | ✅ | adapter metadata + GET /api/channels (registry-driven). |
+
+**133 tests green, tsc clean. 22 commits. 5 migrations safely applied to Railway prod.**
+
+### Phase 4 — remaining (mostly CLIENT UX)
+STU-20..42 the Creation Studio **UI** (describe-in-words screen, draft review, capability/trigger/channel/approval
+pickers, simulate step, guided wizard, gallery, version-history/rollback UI, clone) — the big client-UX build.
+STU-24 templates→spec presets · STU-6 collapse NL pipeline stages.
+
+### Phases 5–6 (not started) — feature build
+Event/trigger/workflow spine (Postgres SKIP-LOCKED + node-cron) + outbound Trackly QR drip + scheduled monitors +
+appointment booking; tools registry + bounded agentic loop; memory/RAG (pgvector on trigger). Plus the broad
+client-UX layer (Approvals inbox, Automations console, Insights, Connected accounts, etc.). Large multi-session work.
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 
