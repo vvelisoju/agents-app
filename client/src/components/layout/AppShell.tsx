@@ -6,7 +6,7 @@ import { Wordmark, Brand } from '@/components/Brand';
 import { NotificationsDrawer } from './NotificationsDrawer';
 import { ProfileMenu } from './ProfileMenu';
 import { cn } from '@/lib/utils';
-import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck, BarChart3 } from 'lucide-react';
+import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck, BarChart3, Database } from 'lucide-react';
 
 const NAV = [
   { path: '/agents', label: 'Agents', icon: Bot },
@@ -15,6 +15,7 @@ const NAV = [
   { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
   { path: '/insights', label: 'Insights', icon: BarChart3 },
   { path: '/leads', label: 'Leads', icon: Users },
+  { path: '/connectors', label: 'Connectors', icon: Database },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 const COLLAPSE_KEY = 'sa_sidebar_collapsed';
