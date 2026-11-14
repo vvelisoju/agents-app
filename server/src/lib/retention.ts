@@ -57,3 +57,9 @@ registerMaintenanceSweep('prune-outbound-ledger', async () => {
   const { count } = await prisma.outboundSendLog.deleteMany({ where: { createdAt: { lt: cutoff() } } });
   return { outboundSendLog: count };
 });
+
+// MK-12 — expired per-contact memory (keeps memory bounded, honors the TTL promise).
+registerMaintenanceSweep('prune-contact-memory', async () => {
+  const { count } = await prisma.contactMemory.deleteMany({ where: { expiresAt: { not: null, lt: new Date() } } });
+  return { contactMemory: count };
+});

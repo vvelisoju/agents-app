@@ -375,6 +375,26 @@ model WorkflowStepLog {
   @@index([runId, createdAt])
 }
 
+// MK-9 — per-contact memory: durable facts an agent learns about a contact (name, preference,
+// last order) and recalls across conversations. Written when the model emits [[REMEMBER:k=v]]
+// (parsed + stripped like [[ALERT]]); injected into the prompt on the next message. Gated by
+// MEMORY_ENABLED so the reply path is byte-for-byte today when off. Bounded by an optional TTL.
+model ContactMemory {
+  id            String    @id @default(uuid())
+  orgId         String
+  agentId       String
+  contactNumber String
+  key           String
+  value         String
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([agentId, contactNumber, key])
+  @@index([orgId])
+  @@index([agentId, contactNumber])
+}
+
 // SCN-27 — a scheduled website/offer/price monitor. The scheduled-monitor handler fetches
 // `url` (SSRF-guarded), extracts readable text, hashes it, and notifies on change. One Watch
 // owns one cron Trigger on the spine (triggerId) created/removed with it.

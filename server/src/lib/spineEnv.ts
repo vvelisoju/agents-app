@@ -20,6 +20,13 @@ export function outboundEnabled(): boolean {
   return v === '1' || v === 'true';
 }
 
+// MK-9 — per-contact memory flag, default off. With it off the engine neither recalls nor stores
+// memory and the reply is byte-for-byte today's.
+export function memoryEnabled(): boolean {
+  const v = process.env.MEMORY_ENABLED;
+  return v === '1' || v === 'true';
+}
+
 export function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || '';
   // The dev/test datasource is SQLite (file:...); everything else is Postgres.

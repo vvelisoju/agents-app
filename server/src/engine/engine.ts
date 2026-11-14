@@ -11,9 +11,10 @@ import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
 import { getAdapter } from '../channels/registry';
 import { InboundMessage } from '../channels/types';
-import { outboundEnabled } from '../lib/spineEnv';
+import { outboundEnabled, memoryEnabled } from '../lib/spineEnv';
 import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
 import { withSendLock } from '../lib/sendMutex';
+import { recallMemory, rememberFacts, extractMemory, memoryBlock } from '../lib/memory';
 import { runAgenticLoop } from './agentic';
 
 // TOOL-14: an agent's enabled tool allowlist (JSON string[]), empty by default.
@@ -202,6 +203,13 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
 
   const { profile, sources } = await loadTraining(agentId);
   const system = composeSystemPrompt(agent, profile, sources);
+  // MK-9: recall per-contact memory and prepend it to the prompt. Gated by MEMORY_ENABLED and a
+  // no-op when there is nothing remembered, so the reply is byte-for-byte today's when off.
+  let systemForTurn = system;
+  if (memoryEnabled()) {
+    const block = memoryBlock(await recallMemory(agentId, inbound.from));
+    if (block) systemForTurn = `${system}\n\n${block}`;
+  }
   const history = (await prisma.message.findMany({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' }, take: 8 }))
     .reverse().map((m) => `${m.direction === 'outbound' ? 'Me (business)' : 'Customer'}: ${m.body}`).join('\n');
 
@@ -216,7 +224,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   try {
     if (agentic) {
       const r = await runAgenticLoop({
-        system,
+        system: systemForTurn,
         userText: history || `Customer: ${text}`,
         enabledTools,
         ctx: { agent, orgId: agent.orgId, conversationId: conv.id, executionId },
@@ -224,7 +232,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
       draft = r.text;
       model = { text: r.text, model: r.model, provider: r.provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, latencyMs: 0, stopReason: 'end_turn', refused: false };
     } else {
-      model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
+      model = await generate({ system: systemForTurn, prompt: buildPrompt(history || `Customer: ${text}`, channelLabel(agent.channelType)) });
       draft = model.text;
     }
   } catch (e: any) {
@@ -244,8 +252,15 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   // Pull out any urgent-lead signal and strip it from the customer-facing reply.
   const { reason: urgentReason, clean } = extractAlert(draft);
   if (urgentReason) { await alertOwner(agent, conv, inbound, urgentReason); }
-  draft = applyLinks(clean, sources);
-  if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert line
+  // MK-9: store any [[REMEMBER:k=v]] facts the model emitted and strip them from the reply (gated).
+  let afterMemory = clean;
+  if (memoryEnabled()) {
+    const mem = extractMemory(clean);
+    if (mem.memories.length) await rememberFacts(agent.orgId, agentId, inbound.from, mem.memories);
+    afterMemory = mem.clean;
+  }
+  draft = applyLinks(afterMemory, sources);
+  if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert/memory line
   // OBS-1: one execution-trace row per produced reply (enriched UsageEvent).
   writeTrace({
     orgId: agent.orgId, agentId, executionId, conversationId: conv.id,
