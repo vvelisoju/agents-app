@@ -26,6 +26,8 @@ The server exposes the live flag state to the authenticated UI at `GET /api/conf
 | `WORKFLOW_ENABLED` | **off** | The entire workflow spine — the runner loop and the scheduler ticker. |
 | `MONITOR_ENABLED` | **off** | The scheduled website-monitor handler. |
 | `OUTBOUND_ENABLED` | **off** | The inbound STOP opt-out pre-check **and** the outbound drip handler. |
+| `MEMORY_ENABLED` | **off** | Per-contact memory recall/store in the reply path. |
+| `SUMMARY_ENABLED` | **off** | Conversation rolling-summary: folds turns older than the recent window into a compact running summary (one background model call every ~10 messages). Independent of the spine. |
 
 ### `WORKFLOW_ENABLED` — the master switch
 

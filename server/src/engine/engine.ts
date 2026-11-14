@@ -11,7 +11,8 @@ import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
 import { getAdapter } from '../channels/registry';
 import { InboundMessage } from '../channels/types';
-import { outboundEnabled, memoryEnabled } from '../lib/spineEnv';
+import { outboundEnabled, memoryEnabled, summaryEnabled } from '../lib/spineEnv';
+import { summaryBlock, maybeSummarize } from '../lib/summary';
 import { isOptOutMessage, suppressContact, OPT_OUT_CONFIRMATION } from '../lib/optout';
 import { withSendLock } from '../lib/sendMutex';
 import { recallMemory, rememberFacts, extractMemory, memoryBlock, MEMORY_INSTRUCTION } from '../lib/memory';
@@ -206,11 +207,19 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   // MK-9: recall per-contact memory and prepend it to the prompt. Gated by MEMORY_ENABLED and a
   // no-op when there is nothing remembered, so the reply is byte-for-byte today's when off.
   let systemForTurn = system;
-  if (memoryEnabled()) {
+  if (memoryEnabled() || summaryEnabled()) {
     const parts = [system];
-    const block = memoryBlock(await recallMemory(agentId, inbound.from));
-    if (block) parts.push(block);
-    parts.push(MEMORY_INSTRUCTION); // tell the model it CAN remember (otherwise it never does)
+    // MK-1: a rolling summary of older turns (gated, no-op when empty/off) keeps long-conversation
+    // context without stuffing the whole history into the prompt.
+    if (summaryEnabled()) {
+      const sblock = summaryBlock(conv as any);
+      if (sblock) parts.push(sblock);
+    }
+    if (memoryEnabled()) {
+      const block = memoryBlock(await recallMemory(agentId, inbound.from));
+      if (block) parts.push(block);
+      parts.push(MEMORY_INSTRUCTION); // tell the model it CAN remember (otherwise it never does)
+    }
     systemForTurn = parts.join('\n\n');
   }
   const history = (await prisma.message.findMany({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' }, take: 8 }))
@@ -285,6 +294,9 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
     model: model.model, provider: model.provider,
     inputTokens: model.inputTokens, outputTokens: model.outputTokens, latencyMs: model.latencyMs,
   });
+
+  // MK-1: refresh the rolling summary in the background (gated; never blocks or breaks the reply).
+  if (summaryEnabled()) void maybeSummarize(conv as any);
 
   if (agent.autoSend) {
     const adapter = getAdapter(agent.channelType);

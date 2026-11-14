@@ -27,6 +27,14 @@ export function memoryEnabled(): boolean {
   return v === '1' || v === 'true';
 }
 
+// MK-1 — conversation rolling-summary flag, default off. With it off the engine never injects or
+// refreshes a summary and the reply is byte-for-byte today's. On, long conversations carry a
+// compact running summary of turns older than the recent window so context isn't lost.
+export function summaryEnabled(): boolean {
+  const v = process.env.SUMMARY_ENABLED;
+  return v === '1' || v === 'true';
+}
+
 // LKD-1 — LinkedIn browser agent master flag, default off. With it off the LinkedIn adapter is a
 // coming-soon catalog tile only and no browser worker / action ever runs. See
 // docs/LINKEDIN_AGENT_PLAN.md. This is owner-operated browser automation (no LinkedIn API) and

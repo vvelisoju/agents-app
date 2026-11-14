@@ -168,6 +168,12 @@ model Conversation {
   // Set when the agent flagged this lead as urgent and pinged the owner. Used to
   // dedupe alerts (don't re-ping within a cooldown) and to show a 🔥 badge.
   alertedAt     DateTime?
+  // MK-1: rolling conversation summary (gated by SUMMARY_ENABLED). `summary` is a compact
+  // paragraph of turns older than the recent window; `summaryThrough` is how many messages it
+  // already covers, so we only re-summarize once enough new ones accrue. Null until first built.
+  summary          String?
+  summaryUpdatedAt DateTime?
+  summaryThrough   Int       @default(0)
   messages      Message[]
 
   @@unique([agentId, contactNumber])
