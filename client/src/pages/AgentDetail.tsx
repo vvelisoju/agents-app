@@ -15,6 +15,7 @@ import { VersionsPanel } from '@/components/agent/VersionsPanel';
 import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
 import { CampaignsPanel } from '@/components/agent/CampaignsPanel';
 import { AbilitiesPanel } from '@/components/agent/AbilitiesPanel';
+import { BookingsPanel } from '@/components/agent/BookingsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -32,6 +33,8 @@ export function AgentDetail({ id }: { id: string }) {
   const { data: training } = useQuery<any>({ queryKey: ['/api/agents/' + id + '/training'] });
   const { data: me } = useQuery<any>({ queryKey: ['/api/me'] });
   const { data: config } = useQuery<any>({ queryKey: ['/api/config'] });
+  const { data: toolsData } = useQuery<any>({ queryKey: ['/api/agents/' + id + '/tools'] });
+  const canBook = !!toolsData?.tools?.find((t: any) => t.name === 'calendar.book' && t.enabled);
   const [tab, setTab] = React.useState('train');
   const [setupDone, setSetupDone] = React.useState(() => readDone(id));
 
@@ -112,6 +115,7 @@ export function AgentDetail({ id }: { id: string }) {
               { id: 'abilities', label: 'Abilities' },
               { id: 'test', label: 'Test' },
               { id: 'chats', label: 'Chats' },
+              ...(canBook ? [{ id: 'bookings', label: 'Bookings' }] : []),
               ...(config?.features?.monitor ? [{ id: 'monitors', label: 'Monitors' }] : []),
               ...(config?.features?.outbound ? [{ id: 'campaigns', label: 'Campaigns' }] : []),
               { id: 'versions', label: 'Versions' },
@@ -121,6 +125,7 @@ export function AgentDetail({ id }: { id: string }) {
           />
           {tab === 'train' && <TrainingPanel id={id} />}
           {tab === 'abilities' && <AbilitiesPanel id={id} />}
+          {tab === 'bookings' && canBook && <BookingsPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
           {tab === 'monitors' && config?.features?.monitor && <MonitorsPanel id={id} />}

@@ -112,6 +112,29 @@ function parseEnabledTools(a: any): string[] {
   catch { return []; }
 }
 
+// SCN-41 — bookings timeline (upcoming + past) + cancel a confirmed booking.
+scoped.get('/bookings', asyncHandler(async (req, res) => {
+  const now = new Date();
+  const rows = await prisma.booking.findMany({
+    where: { orgId: (req as any).user.orgId, agentId: agent(req).id },
+    orderBy: { startAt: 'asc' },
+    take: 200,
+  });
+  res.json({
+    upcoming: rows.filter((b) => b.status !== 'cancelled' && b.endAt >= now),
+    past: rows.filter((b) => b.status === 'cancelled' || b.endAt < now),
+  });
+}));
+
+scoped.post('/bookings/:bookingId/cancel', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const b = await prisma.booking.findFirst({ where: { id: String(req.params.bookingId), orgId: (req as any).user.orgId, agentId: agent(req).id } });
+  if (!b) return res.status(404).json({ error: 'not found' });
+  if (b.status === 'cancelled') return res.json({ ok: true, status: 'cancelled' }); // idempotent
+  await prisma.booking.update({ where: { id: b.id }, data: { status: 'cancelled' } });
+  audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'booking.cancel', targetType: 'booking', targetId: b.id });
+  res.json({ ok: true, status: 'cancelled' });
+}));
+
 // EWS-18 — this agent's workflow runs (org + agent scoped).
 scoped.get('/workflows', asyncHandler(async (req, res) => {
   const { listRuns } = await import('../workflows/service');
