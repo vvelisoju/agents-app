@@ -1,8 +1,11 @@
 // The reply engine — fully channel-agnostic. Adapters hand it a normalised
 // InboundMessage; it loads the agent's CURRENT training, asks Claude, then
 // either delivers via the channel adapter (auto-send) or saves a draft.
+import crypto from 'node:crypto';
 import prisma from '../lib/prisma';
-import { askClaude } from '../lib/brain';
+import { askClaude, generate } from '../lib/brain';
+import { writeTrace } from '../lib/trace';
+import { canSpend } from '../lib/budget';
 import { composeSystemPrompt, applyLinks, extractAlert, Source } from '../lib/training';
 import { toWhatsappChatId } from '../lib/phone';
 import * as realtime from '../lib/realtime';
@@ -87,7 +90,7 @@ export async function draftFor(agent: any, message: string): Promise<{ draft: st
 }
 
 export interface ProcessResult {
-  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away';
+  status: 'ignored' | 'no_agent' | 'error' | 'empty' | 'needs_human' | 'sent' | 'draft' | 'away' | 'budget_exceeded';
   reply?: string;
   conversationId?: string;
 }
@@ -128,6 +131,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
 
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
   if (!agent) return { status: 'no_agent' };
+  const executionId = crypto.randomUUID();
 
   const contactName = inbound.contactName || inbound.from.split('@')[0];
   const conv = await prisma.conversation.upsert({
@@ -160,16 +164,27 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
     }
   }
 
+  // MGW-10/11: per-tenant daily budget. Every channel (incl. the public widget) funnels
+  // through here, so one check caps model spend across all of them.
+  const spend = await canSpend(agent.orgId);
+  if (!spend.allowed) {
+    writeTrace({ orgId: agent.orgId, agentId, executionId, conversationId: conv.id, outcome: 'budget_exceeded' });
+    return { status: 'budget_exceeded', conversationId: conv.id };
+  }
+
   const { profile, sources } = await loadTraining(agentId);
   const system = composeSystemPrompt(agent, profile, sources);
   const history = (await prisma.message.findMany({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' }, take: 8 }))
     .reverse().map((m) => `${m.direction === 'outbound' ? 'Me (business)' : 'Customer'}: ${m.body}`).join('\n');
 
   let draft: string;
+  let model!: Awaited<ReturnType<typeof generate>>;
   try {
-    draft = await askClaude({ system, prompt: buildPrompt(history || `Customer: ${text}`) });
+    model = await generate({ system, prompt: buildPrompt(history || `Customer: ${text}`) });
+    draft = model.text;
   } catch (e: any) {
     console.error('Claude error:', e?.message || e);
+    writeTrace({ orgId: agent.orgId, agentId, executionId, conversationId: conv.id, outcome: 'error', errorCode: 'model_error' });
     return { status: 'error', conversationId: conv.id };
   }
   if (!draft) return { status: 'empty', conversationId: conv.id };
@@ -186,7 +201,14 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
   if (urgentReason) { await alertOwner(agent, conv, inbound, urgentReason); }
   draft = applyLinks(clean, sources);
   if (!draft) return { status: 'ignored', conversationId: conv.id }; // reply was only the alert line
-  await prisma.usageEvent.create({ data: { orgId: agent.orgId, agentId } });
+  // OBS-1: one execution-trace row per produced reply (enriched UsageEvent).
+  writeTrace({
+    orgId: agent.orgId, agentId, executionId, conversationId: conv.id,
+    outcome: agent.autoSend ? 'sent' : 'draft',
+    approvalState: agent.autoSend ? 'auto' : 'draft',
+    model: model.model, provider: model.provider,
+    inputTokens: model.inputTokens, outputTokens: model.outputTokens, latencyMs: model.latencyMs,
+  });
 
   if (agent.autoSend) {
     const adapter = getAdapter(agent.channelType);

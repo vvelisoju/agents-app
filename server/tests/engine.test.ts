@@ -1,22 +1,26 @@
 // FND-40 / QA-04 / QA-05 — money & safety path regression tests.
-// These pin the current reply behaviour (auto-send vs draft, NEEDS_HUMAN escalation,
-// the [[ALERT]] owner ping, and {{LINK}} substitution) BEFORE any runtime refactor,
-// so the gateway/runtime work in Phase 2 cannot silently change what an agent sends.
+// Pin the current reply behaviour (auto-send vs draft, NEEDS_HUMAN escalation, the
+// [[ALERT]] owner ping, and {{LINK}} substitution) so the gateway/trace/budget work
+// cannot silently change what an agent sends. The engine calls brain.generate (usage
+// capture), so that is what we mock.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Mock the single LLM chokepoint before the engine imports it.
-vi.mock('../src/lib/brain', () => ({ askClaude: vi.fn() }));
+vi.mock('../src/lib/brain', () => ({ askClaude: vi.fn(), generate: vi.fn() }));
 
 import prisma from '../src/lib/prisma';
-import { askClaude } from '../src/lib/brain';
+import { generate } from '../src/lib/brain';
 import { processInbound } from '../src/engine/engine';
 import { createOrgWithAgent, addSource } from './helpers/factories';
 import { sends, resetSends } from './helpers/mockChannel';
 
-const ask = vi.mocked(askClaude);
+const gen = vi.mocked(generate);
+const reply = (text: string) => ({
+  text, model: 'claude-haiku-5-5', provider: 'anthropic',
+  inputTokens: 5, outputTokens: 2, latencyMs: 1, stopReason: 'end_turn', refused: false,
+});
 
 beforeEach(() => {
-  ask.mockReset();
+  gen.mockReset();
   resetSends();
 });
 
@@ -25,7 +29,7 @@ const inbound = (text: string, from = '919000000001@c.us') => ({ from, contactNa
 describe('reply engine — money & safety path', () => {
   it('auto-send: delivers the model reply and logs it as sent', async () => {
     const { agent } = await createOrgWithAgent({ autoSend: true });
-    ask.mockResolvedValue('Hello! How can we help?');
+    gen.mockResolvedValue(reply('Hello! How can we help?'));
 
     const res = await processInbound(agent.id, inbound('hi, what are your prices?'));
 
@@ -38,7 +42,7 @@ describe('reply engine — money & safety path', () => {
 
   it('approve-before-send: saves a draft and sends nothing when autoSend is off', async () => {
     const { agent } = await createOrgWithAgent({ autoSend: false });
-    ask.mockResolvedValue('Draft reply');
+    gen.mockResolvedValue(reply('Draft reply'));
 
     const res = await processInbound(agent.id, inbound('a question'));
 
@@ -52,13 +56,13 @@ describe('reply engine — money & safety path', () => {
     const { agent } = await createOrgWithAgent();
     const res = await processInbound(agent.id, inbound('ok'));
     expect(res.status).toBe('ignored');
-    expect(ask).not.toHaveBeenCalled();
+    expect(gen).not.toHaveBeenCalled();
     expect(sends).toHaveLength(0);
   });
 
   it('NEEDS_HUMAN: escalates, sends nothing to the customer', async () => {
     const { agent } = await createOrgWithAgent({ autoSend: true });
-    ask.mockResolvedValue('NEEDS_HUMAN');
+    gen.mockResolvedValue(reply('NEEDS_HUMAN'));
 
     const res = await processInbound(agent.id, inbound('I want a refund, this is terrible'));
 
@@ -70,13 +74,12 @@ describe('reply engine — money & safety path', () => {
 
   it('[[ALERT]]: pings the owner, strips the control line from the customer reply', async () => {
     const { agent } = await createOrgWithAgent({ autoSend: true, alertNumber: '9876543210' });
-    ask.mockResolvedValue('[[ALERT]] ready-to-buy lead\nHi! Yes, we can set that up today.');
+    gen.mockResolvedValue(reply('[[ALERT]] ready-to-buy lead\nHi! Yes, we can set that up today.'));
 
     const res = await processInbound(agent.id, inbound('I want to sign up right now'));
 
     expect(res.status).toBe('sent');
-    // Two sends: the owner alert, then the clean customer reply.
-    expect(sends).toHaveLength(2);
+    expect(sends).toHaveLength(2); // owner alert + clean customer reply
     const customerReply = sends.find((s) => s.text.includes('set that up today'));
     expect(customerReply).toBeTruthy();
     expect(customerReply!.text).not.toContain('[[ALERT]]');
@@ -89,7 +92,7 @@ describe('reply engine — money & safety path', () => {
   it('{{LINK:Name}}: substitutes the exact owner-whitelisted URL, never the model text', async () => {
     const { agent } = await createOrgWithAgent({ autoSend: true });
     await addSource(agent.id, 'link', { name: 'Book', url: 'https://book.example/slot' });
-    ask.mockResolvedValue('Sure — book here: {{LINK:Book}}');
+    gen.mockResolvedValue(reply('Sure — book here: {{LINK:Book}}'));
 
     const res = await processInbound(agent.id, inbound('can I book a visit?'));
 
@@ -104,16 +107,14 @@ describe('reply engine — per-conversation serialization (FND-30 / QA-06)', () 
     const { agent } = await createOrgWithAgent({ autoSend: true });
     let active = 0;
     let maxActive = 0;
-    ask.mockImplementation(async () => {
+    gen.mockImplementation(async () => {
       active++;
       maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 30));
       active--;
-      return 'reply';
+      return reply('reply');
     });
 
-    // Same contact, fired concurrently — the lock must serialize them (never overlap),
-    // so no interleaved history-load, no duplicate Conversation, no double-reply race.
     await Promise.all([
       processInbound(agent.id, inbound('first', '915550000001@c.us')),
       processInbound(agent.id, inbound('second', '915550000001@c.us')),
@@ -122,9 +123,8 @@ describe('reply engine — per-conversation serialization (FND-30 / QA-06)', () 
     const convs = await prisma.conversation.findMany({ where: { agentId: agent.id, contactNumber: '915550000001@c.us' } });
     expect(convs).toHaveLength(1);
     const outbound = await prisma.message.findMany({ where: { agentId: agent.id, direction: 'outbound' } });
-    expect(outbound).toHaveLength(2); // each message handled exactly once
+    expect(outbound).toHaveLength(2);
 
-    // Different contacts must still run in parallel (per-conversation, not global, lock).
     active = 0;
     maxActive = 0;
     await Promise.all([

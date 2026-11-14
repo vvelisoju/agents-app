@@ -62,6 +62,7 @@ model Agent {
   channelType   String           @default("whatsapp-web")
   status        String           @default("draft")
   autoSend      Boolean          @default(false)
+  executionMode String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop, later)
   paused        Boolean          @default(false)
   awayMessage   String?
   hoursStart    Int?
@@ -165,6 +166,22 @@ model UsageEvent {
   agentId   String
   type      String   @default("reply")
   createdAt DateTime @default(now())
+
+  // OBS-1 / MGW-4: execution-trace fields (nullable, additive). Populated on the produced
+  // reply with model/token/cost/latency/outcome so a reply is traceable end-to-end.
+  executionId    String?
+  model          String?
+  provider       String?
+  inputTokens    Int?
+  outputTokens   Int?
+  costMicros     Int?
+  latencyMs      Int?
+  outcome        String? // sent | draft | needs_human | away | error | ignored
+  trigger        String? // channel-event | cron | webhook
+  conversationId String?
+  agentVersion   String?
+  errorCode      String?
+  approvalState  String? // auto | draft | approved | skipped
 
   @@index([orgId, createdAt]) // DB-12: analytics aggregation
 }

@@ -13,6 +13,7 @@
     "db:gen-pg": "node scripts/gen-pg-schema.js",
     "migrate:status": "prisma migrate status --schema prisma/schema.postgres.prisma",
     "migrate:deploy": "prisma migrate deploy --schema prisma/schema.postgres.prisma",
+    "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
     "setup-browser": "npx puppeteer browsers install chrome"
   },

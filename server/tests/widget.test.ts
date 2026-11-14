@@ -1,21 +1,21 @@
 // FND-12/13/14/54 / QA-08 — website widget signed key + per-agent rate cap.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../src/lib/brain', () => ({ askClaude: vi.fn() }));
+vi.mock('../src/lib/brain', () => ({ askClaude: vi.fn(), generate: vi.fn() }));
 
 import request from 'supertest';
 import { buildApp } from '../src/app';
-import { askClaude } from '../src/lib/brain';
+import { generate } from '../src/lib/brain';
 import { widgetKey, verifyWidgetKey } from '../src/lib/widgetKey';
 import { _resetRateLimiter } from '../src/lib/rateLimiter';
 import { createOrgWithAgent } from './helpers/factories';
 
 const app = buildApp();
-const ask = vi.mocked(askClaude);
+const gen = vi.mocked(generate);
 
 beforeEach(() => {
-  ask.mockReset();
-  ask.mockResolvedValue('Hi from the widget');
+  gen.mockReset();
+  gen.mockResolvedValue({ text: 'Hi from the widget', model: 'm', provider: 'anthropic', inputTokens: 1, outputTokens: 1, latencyMs: 1, stopReason: 'end_turn', refused: false });
   _resetRateLimiter();
 });
 
