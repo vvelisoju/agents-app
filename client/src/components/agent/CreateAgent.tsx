@@ -9,7 +9,11 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { channelMeta } from '@/config/channels';
+import { VoiceInput } from '@/components/ui/voice-input';
 import { Sparkles, Plus, X, ChevronLeft, Wand2, AlertTriangle } from 'lucide-react';
+
+// Append dictated text to whatever is already in a field (space-joined).
+const appendText = (prev: string, add: string) => (prev.trim() ? prev.trim() + ' ' : '') + add;
 
 type Channel = { type: string; label: string; blurb: string; ready: boolean };
 
@@ -92,13 +96,19 @@ export function CreateAgent({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="-mr-1 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted" aria-label="Close"><X size={16} /></button>
         </div>
 
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Reply to my salon’s WhatsApp — answer prices and hours, and offer to book."
-          rows={4}
-          autoFocus
-        />
+        <div className="relative">
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Reply to my salon’s WhatsApp — answer prices and hours, and offer to book."
+            rows={4}
+            autoFocus
+            className="pb-11"
+          />
+          <div className="absolute bottom-1.5 right-2">
+            <VoiceInput onTranscript={(t) => setDescription((d) => appendText(d, t))} title="Describe your agent by voice" />
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-1.5">
           {EXAMPLES.map((ex, i) => (
@@ -154,11 +164,21 @@ export function CreateAgent({ onClose }: { onClose: () => void }) {
 
       <div>
         <label className="mb-1 block text-xs font-medium text-muted-foreground">How it should help customers</label>
-        <Textarea
-          value={spec.persona.instructions}
-          onChange={(e) => setSpec({ ...spec, persona: { ...spec.persona, instructions: e.target.value } })}
-          rows={3}
-        />
+        <div className="relative">
+          <Textarea
+            value={spec.persona.instructions}
+            onChange={(e) => setSpec({ ...spec, persona: { ...spec.persona, instructions: e.target.value } })}
+            rows={3}
+            className="pb-10"
+          />
+          <div className="absolute bottom-1.5 right-2">
+            <VoiceInput
+              onTranscript={(t) => setSpec((s: any) => ({ ...s, persona: { ...s.persona, instructions: appendText(s.persona?.instructions || '', t) } }))}
+              showLanguage={false}
+              title="Dictate instructions"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
