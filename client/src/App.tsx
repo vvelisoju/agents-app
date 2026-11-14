@@ -12,6 +12,7 @@ import { Automations } from '@/pages/Automations';
 import { Approvals } from '@/pages/Approvals';
 import { Insights } from '@/pages/Insights';
 import { Connectors } from '@/pages/Connectors';
+import { Audit } from '@/pages/Audit';
 import { Leads } from '@/pages/Leads';
 import { Settings } from '@/pages/Settings';
 import { Subscription } from '@/pages/Subscription';
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/approvals" component={Approvals} />
         <Route path="/insights" component={Insights} />
         <Route path="/connectors" component={Connectors} />
+        <Route path="/audit" component={Audit} />
         <Route path="/leads" component={Leads} />
         <Route path="/settings" component={Settings} />
         <Route path="/subscription" component={Subscription} />

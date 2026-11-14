@@ -6,16 +6,19 @@ import { Wordmark, Brand } from '@/components/Brand';
 import { NotificationsDrawer } from './NotificationsDrawer';
 import { ProfileMenu } from './ProfileMenu';
 import { cn } from '@/lib/utils';
-import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck, BarChart3, Database } from 'lucide-react';
+import { Bot, Inbox, Users, Settings, Menu, Bell, User, Zap, ShieldCheck, BarChart3, Database, ScrollText } from 'lucide-react';
 
-const NAV = [
+// POL-20: `ownerOnly` items are hidden for members. `badge` names a nav item that shows a live
+// count (currently the pending-approvals count on Approvals).
+const NAV: { path: string; label: string; icon: any; ownerOnly?: boolean; badge?: 'approvals' }[] = [
   { path: '/agents', label: 'Agents', icon: Bot },
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/automations', label: 'Automations', icon: Zap },
-  { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { path: '/approvals', label: 'Approvals', icon: ShieldCheck, badge: 'approvals' },
   { path: '/insights', label: 'Insights', icon: BarChart3 },
   { path: '/leads', label: 'Leads', icon: Users },
   { path: '/connectors', label: 'Connectors', icon: Database },
+  { path: '/audit', label: 'Audit', icon: ScrollText, ownerOnly: true },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 const COLLAPSE_KEY = 'sa_sidebar_collapsed';
@@ -42,8 +45,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(() => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } });
   const [notif, setNotif] = React.useState(false);
   const [profile, setProfile] = React.useState(false);
+  // POL-20: role drives nav gating; the pending-approvals count drives the live badge. Both are
+  // cheap cached reads (the approvals key is shared with the Approvals page, refreshed every 15s).
+  const { data: me } = useQuery<{ role?: string }>({ queryKey: ['/api/me'], enabled: authed });
+  const { data: appr } = useQuery<{ approvals: unknown[] }>({ queryKey: ['/api/approvals'], enabled: authed, refetchInterval: 15_000 });
   if (!authed) return <>{children}</>;
 
+  const isOwner = me?.role === 'owner';
+  const nav = NAV.filter((n) => !n.ownerOnly || isOwner);
+  const pendingApprovals = appr?.approvals?.length || 0;
+  const badgeFor = (n: { badge?: string }) => (n.badge === 'approvals' ? pendingApprovals : 0);
   const toggleSidebar = () => setCollapsed((c) => { const n = !c; try { localStorage.setItem(COLLAPSE_KEY, n ? '1' : '0'); } catch {} return n; });
   const isActive = (p: string) => (p === '/agents' ? loc.startsWith('/agents') : loc === p || loc.startsWith(p + '/'));
 
@@ -66,15 +77,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-0 flex-1">
         <aside className={cn('hidden shrink-0 flex-col overflow-y-auto border-r border-border py-3 transition-[width] duration-200 md:flex', collapsed ? 'w-16 px-2' : 'w-60 px-3')}>
           <nav className="space-y-1">
-            {NAV.map((n) => (
+            {nav.map((n) => {
+              const count = badgeFor(n);
+              return (
               <Link key={n.path} href={n.path}>
-                <a title={n.label} className={cn('flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
+                <a title={n.label} className={cn('relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
                   collapsed ? 'justify-center px-0' : 'px-3',
                   isActive(n.path) ? 'bg-primary/15 text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
-                  <n.icon size={18} className={isActive(n.path) ? 'text-primary' : ''} />{!collapsed && n.label}
+                  <span className="relative">
+                    <n.icon size={18} className={isActive(n.path) ? 'text-primary' : ''} />
+                    {count > 0 && collapsed && <span className="absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full bg-primary" />}
+                  </span>
+                  {!collapsed && <span className="flex-1">{n.label}</span>}
+                  {!collapsed && count > 0 && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">{count}</span>}
                 </a>
               </Link>
-            ))}
+            );})}
           </nav>
         </aside>
 
@@ -88,13 +106,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile native bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border glass md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        {NAV.map((n) => (
+        {nav.filter((n) => !n.ownerOnly || isOwner).slice(0, 5).map((n) => {
+          const count = badgeFor(n);
+          return (
           <Link key={n.path} href={n.path}>
-            <a className={cn('flex min-h-tap flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium', isActive(n.path) ? 'text-primary' : 'text-muted-foreground')}>
-              <n.icon size={20} /> {n.label}
+            <a className={cn('relative flex min-h-tap flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium', isActive(n.path) ? 'text-primary' : 'text-muted-foreground')}>
+              <span className="relative">
+                <n.icon size={20} />
+                {count > 0 && <span className="absolute -right-2 -top-1 rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">{count}</span>}
+              </span>
+              {n.label}
             </a>
           </Link>
-        ))}
+        );})}
       </nav>
 
       <NotificationsDrawer open={notif} onClose={() => setNotif(false)} />
