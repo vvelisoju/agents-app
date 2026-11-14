@@ -272,3 +272,32 @@ agentic loop adds one `ExecutionStep` per tool call; `lib/budget.ts` enforces a 
 (`budget_exceeded` outcome) before every turn. Reply-mode runs are byte-for-byte unchanged. For the
 table shapes, the owner-facing metrics, and the retention sweeps, see OBSERVABILITY.md (pairs with
 SECURITY.md and OPERATIONS.md).
+
+---
+
+## Pending-backlog closure wave (2026-11-14, session 2)
+
+A gap-audit reclassified the raw backlog remainder as **128 genuinely-pending buildable** (plus 15
+deferred-by-design and 15 owner-gated — see OWNER_RUNBOOK.md). The following pending items shipped in
+this wave — all additive, flag-safe, test-gated, reply path byte-for-byte:
+
+| Item(s) | What shipped |
+|---|---|
+| SEC-6 | `POST /api/auth/logout` — rotates the bearer token (auth-gated, idempotent). |
+| OBS-12 | `GET /api/agents/:id/executions/:execId` — one execution's full step trace. |
+| OBS-16 | Resolving an approval syncs the originating `ExecutionStep.approvalState`. |
+| MGW-15 | `GET /api/analytics/usage` — today's reply usage vs the plan cap. |
+| EWS-21 | `GET /api/workflows/dlq` + `.../replay` — list & requeue dead-lettered jobs. |
+| PXD-29 | `GET /api/_meta/registries` — introspect channels/tools/workflow-handlers. |
+| QA-13 | CI job: apply the Postgres migration history on a real `postgres:16` service. |
+| QA-14 | CI job: gitleaks secret scan. |
+| MK-27 | `GET /knowledge` per-document breakdown (label/chunks/embedded). |
+| MK-19 | `DELETE /knowledge/sources?label=` — invalidate one document's chunks. |
+| MK-1/2/3 | Conversation rolling-summary (schema + `lib/summary.ts`, gated by `SUMMARY_ENABLED`, default off). |
+| MK-13 | `GET/DELETE /api/agents/:id/memory` — owner reads/forgets per-contact memory. |
+| MGW-16, OBS-19/20 | Client: usage meter + recent-execution feed with step-trace drill-down on Insights. |
+| DB-20, DB-16 | `migrate:dev`/`migrate:diff`/`db:reset` npm script aliases. |
+| PXD docs | New EXTENDING/TESTING/OBSERVABILITY/POLICY_AND_AUDIT/MIGRATIONS + root CLAUDE.md; reconciled ARCHITECTURE/DEPLOY/TRAINING/DEV + planning-doc banners + ADR process + architecture index. |
+
+Suite after the wave: **50 files, 333 tests green.** New migration
+`20261114220000_conversation_summary` (additive columns on `Conversation`) applies on next deploy.
