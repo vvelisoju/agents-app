@@ -128,12 +128,27 @@ STU-30/32 flip) · STU-6 collapse NL pipeline stages · STU-27..35 richer draft-
 | EWS-14 boot wiring | ✅ | `jobs/spine.ts` + `index.ts`: start only when WORKFLOW_ENABLED, double-start guard, SIGTERM lease release. |
 | EWS-15/28 tests | ✅ | `tests/spine.test.ts` — 24 tests. **157 total green, tsc clean, no regression.** |
 
+### Phase 5 — Runs APIs + Automations UI + first handler (DONE)
+| Task | Status | Notes |
+|---|---|---|
+| EWS-16/17 raw-body Razorpay webhook | ✅ | Already covered by Phase-0 FND-20/21 (`app.ts` mounts `express.raw` before `express.json`; server-authoritative plan apply). |
+| EWS-18/19 Runs read + control APIs | ✅ | `modules/workflows/` — GET /api/workflows, GET /:runId (+timeline), GET /api/agents/:id/workflows, POST /:runId/{pause\|resume\|cancel\|approve} (idempotent, authz-gated, audited; approve decides the Approval + enqueues resume). 6 tests. |
+| EWS-24/25/26 Automations UI | ✅ | `/automations` route + nav + `pages/Automations.tsx`: outcome-named run list, inline run detail with step timeline, pause/resume/cancel/approve controls; server pushes a 'workflow' WS event on control transitions. |
+| SCN-27/28/29/42/36/30/31 scheduled website monitor | ✅ | **First real handler, end-to-end.** Watch model (migration on prod) + cron Trigger; `lib/monitor.ts` (SSRF snapshot+diff) + `lib/notify.ts`; `scheduledMonitor` handler (baseline→change→notify, MONITOR_ENABLED-gated); `/api/agents/:id/watches` CRUD; `GET /api/config` flags; client `MonitorsPanel` (tab shown only when flag on). 10 tests. |
+
+**173 tests green, tsc clean, no regression. 3 migrations safely applied to Railway prod this session.**
+
 ### Phase 5 — remaining
-EWS-16/17 confirm/extend raw-body Razorpay webhook (Phase-0 FND-20/21 may already cover) · EWS-18/19 Runs
-read + control APIs · EWS-22 spine metrics · EWS-24/25/26 Automations page + run detail + 'workflow' WS event ·
-EWS-33/34 retention sweeps + shared maintenance ticker · EWS-30/31 docs + pg-boss decision · EWS-32 inbound
-durability ADR. Then **SCN** handlers (scheduled website monitor, appointment booking, outbound QR drip) that
-register on the spine — the features that make agents *act*.
+EWS-22 spine metrics · EWS-33/34 retention sweeps + shared maintenance ticker · EWS-30/31 docs + pg-boss
+decision · EWS-32 inbound-durability ADR. **SCN outbound QR drip** (SCN-05..19 — OutboundConnection/SendLog/
+OptOut model, Trackly connector, drip handler w/ cap/window/jitter/warmup/mutex, STOP opt-out, approval-gated
+start, console) and **SCN appointment booking** (SCN-20..25 — Booking model, calendar.book tool on the agentic
+path, approve-before-book, double-book guard, booking view) — both land on the now-proven spine. SCN-37 scenario
+picker · SCN-01 channel-aware reply prompt.
+
+### Phases 6 (not started)
+Tools registry + bounded agentic loop (TOOL-*) · memory/RAG w/ pgvector (MK-*). Booking's calendar.book tool
+(SCN-21) depends on the Phase-6 tool registry.
 
 ### Phases 5–6 (not started) — feature build
 Event/trigger/workflow spine (Postgres SKIP-LOCKED + node-cron) + outbound Trackly QR drip + scheduled monitors +
