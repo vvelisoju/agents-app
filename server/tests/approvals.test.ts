@@ -2,8 +2,9 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { buildApp } from '../src/app';
-import { createApproval } from '../src/policy/approvals';
-import { createOrg, createUser } from './helpers/factories';
+import { createApproval, decideApproval } from '../src/policy/approvals';
+import prisma from '../src/lib/prisma';
+import { createOrg, createUser, createAgent } from './helpers/factories';
 
 const app = buildApp();
 const auth = (t: string) => ({ Authorization: 'Bearer ' + t });
@@ -43,6 +44,20 @@ describe('approval queue', () => {
     const res = await request(app).post(`/api/approvals/${a.id}/approve`).set(auth(member.token));
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('approved');
+  });
+
+  // OBS-16 — resolving an approval flips the originating execution step's approvalState.
+  it('syncs the execution step trace when its approval is decided', async () => {
+    const org = await createOrg();
+    const agent = await createAgent(org.id);
+    await prisma.executionStep.create({
+      data: { orgId: org.id, agentId: agent.id, executionId: 'exec-appr', stepIndex: 0, toolName: 'data.action', outcome: 'pending_approval', approvalState: 'pending_approval' },
+    });
+    const a = await createApproval({ orgId: org.id, agentId: agent.id, actionType: 'data_write', payload: { tool: 'data.action', input: {}, executionId: 'exec-appr', stepIndex: 0 } });
+
+    await decideApproval(org.id, a.id, 'approved');
+    const step = await prisma.executionStep.findFirst({ where: { orgId: org.id, executionId: 'exec-appr', stepIndex: 0 } });
+    expect(step?.approvalState).toBe('approved');
   });
 
   it('404s an approval from another org (tenant isolation)', async () => {

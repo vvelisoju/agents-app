@@ -139,4 +139,31 @@ describe('Agent tools + executions API', () => {
       expect(ids).toEqual(['exec-mine']);
     });
   });
+
+  describe('GET /executions/:execId', () => {
+    it('returns one execution ordered with parsed input, 404 for unknown/other-org', async () => {
+      await prisma.executionStep.createMany({
+        data: [
+          { orgId, agentId, executionId: 'exec-D', stepIndex: 1, toolName: 'crm.create_lead', outcome: 'ok', approvalState: 'pre_approved', latencyMs: 9, inputJson: JSON.stringify({ name: 'Asha' }) },
+          { orgId, agentId, executionId: 'exec-D', stepIndex: 0, toolName: 'knowledge.search', outcome: 'ok', approvalState: 'inline', latencyMs: 4, inputJson: '{"q":"hours"}' },
+        ],
+      });
+
+      const r = await request(app).get(`/api/agents/${agentId}/executions/exec-D`).set(auth(token));
+      expect(r.status).toBe(200);
+      expect(r.body.executionId).toBe('exec-D');
+      expect(r.body.steps.map((s: any) => s.stepIndex)).toEqual([0, 1]);
+      expect(r.body.steps[0].input).toEqual({ q: 'hours' }); // inputJson parsed
+      expect(r.body.steps[1].tool).toBe('crm.create_lead');
+
+      // Unknown id → 404.
+      expect((await request(app).get(`/api/agents/${agentId}/executions/nope`).set(auth(token))).status).toBe(404);
+
+      // Another org's execution id → 404 (org scoping).
+      const other = await createOrg();
+      const otherAgent = (await createAgent(other.id)).id;
+      await prisma.executionStep.create({ data: { orgId: other.id, agentId: otherAgent, executionId: 'exec-foreign', stepIndex: 0, toolName: 'knowledge.search', outcome: 'ok' } });
+      expect((await request(app).get(`/api/agents/${agentId}/executions/exec-foreign`).set(auth(token))).status).toBe(404);
+    });
+  });
 });

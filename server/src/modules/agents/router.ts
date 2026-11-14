@@ -128,6 +128,26 @@ scoped.get('/executions', asyncHandler(async (req, res) => {
   res.json({ executions });
 }));
 
+// OBS-12 — one execution's full ordered step trace (includes the already-redacted
+// inputJson, parsed for the viewer). Org-scoped; 404 when the id isn't this agent's.
+scoped.get('/executions/:execId', asyncHandler(async (req, res) => {
+  const rows = await prisma.executionStep.findMany({
+    where: { orgId: (req as any).user.orgId, agentId: agent(req).id, executionId: String(req.params.execId) },
+    orderBy: { stepIndex: 'asc' },
+  });
+  if (!rows.length) return res.status(404).json({ error: 'execution not found' });
+  const safeParse = (s: string) => { try { return JSON.parse(s); } catch { return {}; } };
+  res.json({
+    executionId: String(req.params.execId),
+    at: rows[0].createdAt,
+    steps: rows.map((r) => ({
+      stepIndex: r.stepIndex, tool: r.toolName, outcome: r.outcome,
+      approvalState: r.approvalState, latencyMs: r.latencyMs, at: r.createdAt,
+      input: safeParse(r.inputJson),
+    })),
+  });
+}));
+
 function parseEnabledTools(a: any): string[] {
   try { const x = JSON.parse(a.enabledToolsJson || '[]'); return Array.isArray(x) ? x.filter((v) => typeof v === 'string') : []; }
   catch { return []; }

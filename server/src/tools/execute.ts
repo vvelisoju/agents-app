@@ -74,7 +74,8 @@ export async function executeTool(tool: Tool, input: unknown, ctx: ToolContext, 
       orgId: ctx.orgId,
       actionType: tool.approvalAction || tool.sideEffect,
       agentId: ctx.agent?.id ?? null,
-      payload: { tool: tool.name, input: data },
+      // OBS-16: carry the trace coordinates so decideApproval can flip the step's approvalState.
+      payload: { tool: tool.name, input: data, executionId: ctx.executionId, stepIndex: opts.stepIndex },
       requestedBy: ctx.requestedBy ?? null,
     });
     emit('pending_approval', { approvalId: approval.id });

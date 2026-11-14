@@ -7,7 +7,7 @@ import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { validate } from '../../middleware/validate';
 import { signupStartSchema, signupVerifySchema, loginSchema, forgotSchema, resetSchema } from '../../lib/schemas';
-import { hashPassword, verifyPassword, newToken } from '../../middleware/auth';
+import { hashPassword, verifyPassword, newToken, authMiddleware } from '../../middleware/auth';
 import { normalizePhone } from '../../lib/phone';
 import { requestOtp, verifyOtp, consumeVerification } from '../../lib/otp';
 
@@ -74,6 +74,16 @@ router.post('/reset', validate(resetSchema), asyncHandler(async (req, res) => {
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(req.body.password), token } });
   await consumeVerification(phone, 'password_reset');
   res.json({ token, phone: user.phone });
+}));
+
+// SEC-6: logout. Rotates the caller's bearer token so the presented one stops
+// working immediately — the client simply drops its copy. Rotating (rather than
+// nulling) keeps the column populated and works the same under the future hashed
+// token scheme. Idempotent and auth-gated; never reveals anything on a bad token.
+router.post('/logout', authMiddleware, asyncHandler(async (req, res) => {
+  const user = (req as any).user;
+  await prisma.user.update({ where: { id: user.id }, data: { token: newToken() } });
+  res.json({ ok: true });
 }));
 
 export default router;

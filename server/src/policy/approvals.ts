@@ -58,6 +58,17 @@ export async function decideApproval(
     data: { status: decision, decidedByUserId: userId ?? null, decidedAt: new Date() },
   });
   audit({ orgId, actorUserId: userId, action: `approval.${decision}`, targetType: 'approval', targetId: id, metadata: { actionType: a.actionType } });
+  // OBS-16: reflect the decision on the originating execution step so the trace stops showing
+  // 'pending_approval' forever. Best-effort; a missing/un-traced approval is a no-op.
+  try {
+    const p = JSON.parse(a.payloadJson || '{}');
+    if (p && p.executionId && p.stepIndex != null) {
+      await prisma.executionStep.updateMany({
+        where: { orgId, executionId: String(p.executionId), stepIndex: Number(p.stepIndex) },
+        data: { approvalState: decision },
+      });
+    }
+  } catch { /* trace sync must never break the decision path */ }
   // POL-10: on approval, run any registered executor for this action (e.g. a gated tool call).
   if (decision === 'approved') await fireApproved(approval);
   return { ok: true, status: decision, approval };
