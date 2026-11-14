@@ -13,6 +13,7 @@ promotes it. Authoritative over the narrative docs where they differ. (PXD-10)
 | ADR-5 | **Hashed + expiring bearer token**, not JWT/OIDC IdP | Fixes plaintext-token hole without IdP ops cost. |
 | ADR-6 | **In-repo `authorize()` + per-action table**, not OPA/Cedar | Owner/member + ~8 actions; a PDP sidecar is unjustified. |
 | ADR-7 | **App-level AES-256-GCM secrets** (env key + `keyId`), not external KMS | Removes plaintext-at-rest now; KMS envelope is a later upgrade. |
+| ADR-8 | **Inbound is persisted synchronously before the reply**, serialized per conversation — no separate inbound queue/outbox | At this scale a DB write + per-conversation lock gives durability + exactly-one-reply without the ops cost of an inbound broker. See below. |
 
 ## DB-1 — datasource & migration strategy  ⚠️ **owner decision needed before Phase 1 execution**
 **Chosen (recommended): Postgres everywhere, real migrations.**
@@ -41,6 +42,33 @@ prod; prod still boots via `db push` until DB-4 lands. No destructive change has
 **Alternatives rejected:** keeping SQLite-dev + Postgres-prod with a build-time `sed` swap and no
 migrations (the status-quo hazard Phase 1 exists to remove); maintaining two provider-specific migration
 histories (DB-18 divergence, error-prone).
+
+## ADR-8 — inbound message durability (EWS-32)
+
+**Context.** A channel (WhatsApp, website widget, …) hands an inbound message to
+`processInbound`. If the process crashed mid-reply, could a customer message be lost or answered
+twice?
+
+**Decision.** `processInbound` runs **serialized per conversation** (`withConversationLock(agentId:from)`)
+and **persists the inbound `Message` row (status `received`) before** any model call or reply
+(`engine.ts`, right after the `Conversation` upsert). The reply is produced after, and the outbound
+is persisted as `draft`/`sent`. There is **no separate inbound queue or transactional outbox** — the
+single synchronous DB write is the durability point.
+
+**Properties this gives us.**
+- *Durable inbound:* once the `received` row is committed, the message survives a crash; the owner
+  sees it in the inbox even if reply generation later failed.
+- *Exactly-one-reply per turn:* the per-conversation lock means two near-simultaneous messages can't
+  both load the same history and double-reply; the deterministic post-processing
+  (`NEEDS_HUMAN`/`[[ALERT]]`/`{{LINK}}`) runs once.
+- *At-least-once, not exactly-once end-to-end:* a crash **between** reply-send and persisting the
+  outbound row can, in the worst case, resend on a channel retry. This is accepted at this scale;
+  the WhatsApp adapter's own send is the only external effect and is mutexed per agent.
+
+**Flip trigger.** Move inbound onto the Postgres `Job`/outbox spine (durable, replayable, DLQ) when
+either (a) a single channel pushes inbound faster than synchronous processing can drain, or (b) we
+need cross-process inbound fan-out. The spine already exists (`jobs/`, gated by `WORKFLOW_ENABLED`),
+so this is a routing change, not new infrastructure.
 
 ## Deferred — with flip triggers
 | Item | Trigger to adopt |
