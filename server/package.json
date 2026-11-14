@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate",
+    "db:gen-pg": "node scripts/gen-pg-schema.js",
+    "migrate:status": "prisma migrate status --schema prisma/schema.postgres.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.postgres.prisma",
     "test": "vitest run",
     "setup-browser": "npx puppeteer browsers install chrome"
   },

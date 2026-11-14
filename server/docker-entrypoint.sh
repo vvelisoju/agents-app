@@ -1,32 +1,23 @@
 #!/bin/sh
-# Sync the Prisma schema to the database, then start the server.
-# Fails loudly (non-zero exit) if the schema can't be applied, so a broken DB
-# surfaces as a failed deploy instead of silent 500s at runtime.
+# DB-4 — apply pending Prisma migrations (forward-only, reviewed SQL with history),
+# then start the server. This replaces the previous destructive sync-on-boot (and its
+# reset escape hatch), which could silently drop prod columns/data.
 #
-# One-time reset: set DB_FORCE_RESET=true in the environment to DROP and recreate
-# the database on boot (ALL DATA LOST), then remove the var. Use this when a
-# schema change can't apply over existing rows (e.g. adding a required column).
+# Migrations are Postgres (prisma/schema.postgres.prisma). The baseline (0_init) was
+# marked applied on the existing prod DB; migrate deploy only runs NEW migrations.
 set -e
 
-PUSH_FLAGS="--skip-generate --accept-data-loss"
-if [ "$DB_FORCE_RESET" = "true" ]; then
-  echo "⚠️  DB_FORCE_RESET=true — dropping and recreating the database. ALL DATA WILL BE LOST."
-  echo "    Remove this variable after this deploy so it never wipes again."
-  PUSH_FLAGS="$PUSH_FLAGS --force-reset"
-fi
-
-echo "⏳ Syncing database schema (prisma db push $PUSH_FLAGS)..."
+echo "⏳ Applying database migrations (prisma migrate deploy)..."
 n=0
-until npx prisma db push $PUSH_FLAGS; do
+until npx prisma migrate deploy --schema prisma/schema.postgres.prisma; do
   n=$((n + 1))
   if [ "$n" -ge 8 ]; then
-    echo "❌ FATAL: database schema sync failed after $n attempts. See the error above."
-    echo "   If this is a destructive change over existing rows, set DB_FORCE_RESET=true once."
+    echo "❌ FATAL: prisma migrate deploy failed after $n attempts. See the error above."
     exit 1
   fi
-  echo "  schema sync attempt $n failed (db may still be starting); retrying in 4s..."
+  echo "  migrate attempt $n failed (db may still be starting); retrying in 4s..."
   sleep 4
 done
 
-echo "✅ Database schema in sync. Starting server..."
+echo "✅ Migrations applied. Starting server..."
 exec npx tsx src/index.ts

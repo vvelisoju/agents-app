@@ -52,3 +52,20 @@ jobs:
             exit 1
           fi
           echo "All dependencies are pinned."
+      # QA-12: the prod boot path must never run a destructive schema sync.
+      - name: No destructive schema sync on the prod path
+        run: |
+          if grep -REn 'accept-data-loss|force-reset|db push' server/docker-entrypoint.sh server/Dockerfile; then
+            echo "::error::Destructive schema op on the prod path — use prisma migrate deploy."
+            exit 1
+          fi
+          echo "Prod path uses migrate deploy only."
+      # DB-5: the generated Postgres schema must stay in sync with schema.prisma.
+      - name: Postgres schema in sync
+        working-directory: server
+        run: |
+          node scripts/gen-pg-schema.js
+          git diff --exit-code prisma/schema.postgres.prisma || {
+            echo "::error::prisma/schema.postgres.prisma is stale — run npm run db:gen-pg and commit."
+            exit 1
+          }

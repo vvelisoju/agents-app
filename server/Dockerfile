@@ -16,11 +16,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# Production image runs on PostgreSQL (dev/tests stay SQLite).
-RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
-RUN npx prisma generate
+# Production runs on PostgreSQL via the committed schema.postgres.prisma (dev/tests use
+# SQLite via schema.prisma). DB-5: no more build-time sed swap.
+RUN npx prisma generate --schema prisma/schema.postgres.prisma
 RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 4000
-# Apply the schema (fail the deploy if it can't sync), then start the server.
+# Apply pending migrations (prisma migrate deploy), then start the server.
 CMD ["sh", "docker-entrypoint.sh"]
