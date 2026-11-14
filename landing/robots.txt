@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Point crawlers at the sitemap (swap the domain for your marketing domain)
+Sitemap: https://www.example.com/sitemap.xml

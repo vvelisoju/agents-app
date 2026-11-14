@@ -13,7 +13,7 @@ import { callModel, type ToolCall } from '../lib/model-gateway';
 import { canSpend } from '../lib/budget';
 import { getTool, listTools } from '../tools/registry';
 import { executeTool } from '../tools/execute';
-import { toAnthropicTool } from '../tools/schema';
+import { toAnthropicTool, decodeToolName } from '../tools/schema';
 import type { ToolContext } from '../tools/types';
 
 const MAX_TURNS = Number(process.env.AGENTIC_MAX_TURNS) || 6;
@@ -81,19 +81,21 @@ export async function runAgenticLoop(input: AgenticInput): Promise<AgenticResult
           toolResults.push(resultBlock(call, 'tool call limit reached', true));
           continue;
         }
-        const tool = enabled.has(call.name) ? getTool(call.name) : undefined;
+        // The model returns the wire name (dots encoded as '__'); decode to the registry name.
+        const toolName = decodeToolName(call.name);
+        const tool = enabled.has(toolName) ? getTool(toolName) : undefined;
         if (!tool) {
           // A tool named by the model but not on the allowlist is never executed (TOOL-14).
-          steps.push({ tool: call.name, ok: false, code: 'denied' });
+          steps.push({ tool: toolName, ok: false, code: 'denied' });
           toolResults.push(resultBlock(call, 'that tool is not available', true));
           continue;
         }
         const r = await executeTool(tool, call.input, input.ctx, { stepIndex: steps.length });
         if (r.ok) {
-          steps.push({ tool: call.name, ok: true });
+          steps.push({ tool: toolName, ok: true });
           toolResults.push(resultBlock(call, JSON.stringify(r.output), false));
         } else {
-          steps.push({ tool: call.name, ok: false, code: r.code, approvalId: r.approvalId });
+          steps.push({ tool: toolName, ok: false, code: r.code, approvalId: r.approvalId });
           toolResults.push(resultBlock(call, `${r.code}: ${r.error}`, true));
         }
       }
