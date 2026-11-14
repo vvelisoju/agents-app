@@ -76,18 +76,24 @@ In production, **step 7 runs automatically on boot** — see §3.
 
 ### Authoring the SQL (step 3)
 
-There is no npm script for *creating* a migration (only `db:gen-pg`, `migrate:status`, `migrate:deploy`
-are wrapped). Generate the forward SQL from the migration history to the regenerated Postgres schema,
-always passing `--schema prisma/schema.postgres.prisma` so you diff Postgres DDL, e.g.:
+`npm run migrate:diff` (DB-20) wraps the `prisma migrate diff` invocation below and prints the forward
+SQL to **stdout**; redirect it into a new migration folder. (`db:gen-pg`, `migrate:status`,
+`migrate:deploy`, `migrate:dev` are the other wrapped scripts.) It diffs the migration history against
+the regenerated Postgres schema, always with `--schema prisma/schema.postgres.prisma` so you diff
+Postgres DDL:
 
 ```sh
 # from server/
 mkdir -p prisma/migrations/$(date +%Y%m%d%H%M%S)_<name>
-prisma migrate diff \
-  --from-migrations prisma/migrations \
-  --to-schema-datamodel prisma/schema.postgres.prisma \
-  --script > prisma/migrations/<timestamp>_<name>/migration.sql
+npm run migrate:diff > prisma/migrations/<timestamp>_<name>/migration.sql
+# equivalently, the raw command migrate:diff wraps:
+#   prisma migrate diff --from-migrations prisma/migrations \
+#     --to-schema-datamodel prisma/schema.postgres.prisma --script
 ```
+
+For local iteration against a throwaway Postgres you can instead use `npm run migrate:dev` (creates +
+applies a dev migration interactively). Reset the local **SQLite** dev DB with `npm run db:reset`
+(DB-16) — `prisma db push --force-reset`, which drops and recreates every table from `schema.prisma`.
 
 Name the folder `<timestamp>_<snake_case_name>` to match the existing history (e.g.
 `20261114210000_connectors`). The SQL should read like the shipped migrations — `CreateTable`,
