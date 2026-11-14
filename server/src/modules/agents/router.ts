@@ -31,7 +31,7 @@ router.post('/', validate(createAgentSchema), asyncHandler(async (req, res) => {
     return res.status(402).json({ error: `Plan limit reached (${sub.maxAgents} agents). Upgrade to add more.`, code: 'subscription_required' });
   }
   const agent = await prisma.agent.create({ data: { orgId, name, channelType: req.body?.channelType || 'whatsapp-web' } });
-  await prisma.trainingProfile.create({ data: { agentId: agent.id } });
+  await prisma.trainingProfile.create({ data: { agentId: agent.id, orgId } });
   res.json(agent);
 }));
 
@@ -116,7 +116,7 @@ scoped.post('/disconnect', asyncHandler(async (req, res) => {
 scoped.get('/training', asyncHandler(async (req, res) => {
   const agentId = agent(req).id;
   let profile = await prisma.trainingProfile.findUnique({ where: { agentId } });
-  if (!profile) profile = await prisma.trainingProfile.create({ data: { agentId } });
+  if (!profile) profile = await prisma.trainingProfile.create({ data: { agentId, orgId: agent(req).orgId } });
   const sources = await loadSources(agentId);
   res.json({ profile, sources, summary: trainingSummary(profile, sources) });
 }));
@@ -161,7 +161,7 @@ scoped.post('/training/learn', asyncHandler(async (req, res) => {
 
 scoped.post('/training/sources', validate(sourceSchema), asyncHandler(async (req, res) => {
   const { type, data } = req.body;
-  const row = await prisma.trainingSource.create({ data: { agentId: agent(req).id, type, dataJson: JSON.stringify(data || {}) } });
+  const row = await prisma.trainingSource.create({ data: { agentId: agent(req).id, orgId: agent(req).orgId, type, dataJson: JSON.stringify(data || {}) } });
   res.json({ id: row.id });
 }));
 

@@ -23,7 +23,7 @@ export async function createAgent(
   const agent = await prisma.agent.create({
     data: { orgId, name: 'Biz', channelType: 'test', autoSend: true, ...data },
   });
-  await prisma.trainingProfile.create({ data: { agentId: agent.id } });
+  await prisma.trainingProfile.create({ data: { agentId: agent.id, orgId } });
   return agent;
 }
 

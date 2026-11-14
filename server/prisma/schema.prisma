@@ -85,16 +85,20 @@ model Agent {
 
 model ChannelSession {
   id              String    @id @default(uuid())
+  orgId           String? // DB-7: direct tenant scoping (backfilled; populated at write time)
   agentId         String    @unique
   agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   status          String    @default("pending_qr")
   phoneNumber     String?
   lastConnectedAt DateTime?
   updatedAt       DateTime  @updatedAt
+
+  @@index([orgId])
 }
 
 model TrainingProfile {
   id                String   @id @default(uuid())
+  orgId             String? // DB-8: direct tenant scoping
   agentId           String   @unique
   agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   instructions      String   @default("")
@@ -103,16 +107,21 @@ model TrainingProfile {
   language          String   @default("match the customer")
   escalationKeyword String   @default("NEEDS_HUMAN")
   updatedAt         DateTime @updatedAt
+
+  @@index([orgId])
 }
 
 model TrainingSource {
   id        String   @id @default(uuid())
+  orgId     String? // DB-9: direct tenant scoping
   agentId   String
   agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   type      String // 'fact' | 'link' | 'faq'
   dataJson  String // JSON: {content} | {name,url} | {question,answer}
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  @@index([orgId])
 }
 
 model Conversation {
@@ -137,6 +146,7 @@ model Conversation {
 
 model Message {
   id             String       @id @default(uuid())
+  orgId          String? // DB-10: direct tenant scoping (highest-growth table)
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   agentId        String
@@ -144,6 +154,9 @@ model Message {
   body           String
   status         String // received | draft | sent | skipped | needs_human
   createdAt      DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([conversationId, createdAt]) // DB-11: history reads on the highest-growth table
 }
 
 model UsageEvent {
@@ -152,4 +165,6 @@ model UsageEvent {
   agentId   String
   type      String   @default("reply")
   createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt]) // DB-12: analytics aggregation
 }

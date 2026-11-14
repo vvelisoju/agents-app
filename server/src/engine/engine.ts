@@ -135,7 +135,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
     update: { lastMessageAt: new Date(), contactName },
     create: { agentId, orgId: agent.orgId, contactNumber: inbound.from, contactName },
   });
-  await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'inbound', body: text, status: 'received' } });
+  await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'inbound', body: text, status: 'received' } });
   realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'received' });
 
   // Respect agent pause, per-conversation human takeover, and mute: still log the
@@ -154,7 +154,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
       if (lastOut?.status === 'away') return { status: 'ignored', conversationId: conv.id };
       const adapter = getAdapter(agent.channelType);
       try { if (adapter) await adapter.send(agentId, inbound.from, agent.awayMessage); } catch { /* ignore */ }
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: agent.awayMessage, status: 'away' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: agent.awayMessage, status: 'away' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'away' });
       return { status: 'away', reply: agent.awayMessage, conversationId: conv.id };
     }
@@ -176,7 +176,7 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
 
   const esc = profile?.escalationKeyword || 'NEEDS_HUMAN';
   if (draft.includes(esc)) {
-    await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: '[needs a human]', status: 'needs_human' } });
+    await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: '[needs a human]', status: 'needs_human' } });
     realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'needs_human' });
     return { status: 'needs_human', conversationId: conv.id };
   }
@@ -192,18 +192,18 @@ async function processInboundLocked(agentId: string, inbound: InboundMessage): P
     const adapter = getAdapter(agent.channelType);
     try {
       if (adapter) await adapter.send(agentId, inbound.from, draft);
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'sent' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'sent' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'sent' });
       return { status: 'sent', reply: draft, conversationId: conv.id };
     } catch (e: any) {
       console.error('send failed:', e?.message || e);
-      await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'draft' } });
+      await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'draft' } });
       realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'draft' });
       return { status: 'draft', reply: draft, conversationId: conv.id };
     }
   }
 
-  await prisma.message.create({ data: { conversationId: conv.id, agentId, direction: 'outbound', body: draft, status: 'draft' } });
+  await prisma.message.create({ data: { conversationId: conv.id, orgId: agent.orgId, agentId, direction: 'outbound', body: draft, status: 'draft' } });
   realtime.emit(agentId, 'message', { conversationId: conv.id, status: 'draft' });
   return { status: 'draft', reply: draft, conversationId: conv.id };
 }
