@@ -1,5 +1,15 @@
 # Trackly → Agent Outbound Integration Plan (QR drip)
 
+> **Scope lock — BROADCAST / official Cloud API is OUT.** Per the locked architecture decision
+> (**ADR-3**, owner call 2026-11-14 — see [architecture/decision-log.md](architecture/decision-log.md)),
+> **`whatsapp-web.js` (QR) is the only agent transport**, and the official WhatsApp Cloud API /
+> [BROADCAST_INTEGRATION_PLAN.md](BROADCAST_INTEGRATION_PLAN.md) path is **dropped**. The only agent
+> outbound is the **QR-connected WhatsApp drip** (built + gated by `OUTBOUND_ENABLED`; see
+> [architecture/EXECUTION_LOG.md](architecture/EXECUTION_LOG.md) → Phase 5 "Outbound QR drip"). In the
+> shipped system recipients come from the **owner's own list**; **Trackly is an optional recipient
+> source** reached through the reusable connector contract (SCN-08, not yet built). This document plans
+> that optional source — it does not reintroduce a broadcast/Cloud-API channel.
+
 **Status:** Plan only (no code changes).
 **Scope:** Pull leads + promo content (image + text) from **Trackly**, send them through this
 app's **QR-connected WhatsApp number** (`whatsapp-web.js`) as a **throttled daily drip**

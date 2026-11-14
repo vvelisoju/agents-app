@@ -1,5 +1,7 @@
 # Implementation plan
 
+> **Planning doc — not the source of truth.** The **backlog** ([architecture/backlog.md](architecture/backlog.md)) and the **shipped code** are authoritative. For what is actually built, tested, and deployed, see the **Execution Log** ([architecture/EXECUTION_LOG.md](architecture/EXECUTION_LOG.md)). Phases 0–6 are core-complete and on prod; this document is the original forward plan and may lag what shipped.
+
 Aligned to the core requirement: **end-to-end functionality first**, subscription later.
 
 ## Phases

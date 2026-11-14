@@ -55,3 +55,65 @@ histories (DB-18 divergence, error-prone).
 
 ## Skipped (not at this scale)
 Temporal · Kafka/NATS · Google A2A protocol · LangGraph · external IdP (Keycloak/Auth0/Ory).
+
+---
+
+## ADR process
+
+How entries in this log are numbered, moved through their lifecycle, added, and superseded. This log
+is the single authoritative record of architecture decisions; it wins over the narrative docs where
+they differ.
+
+### Numbering
+
+- **Adopted** decisions are `ADR-<n>`, numbered sequentially and never reused. A number is permanent:
+  once `ADR-7` exists, the next adopted decision is `ADR-8` even if `ADR-7` is later superseded.
+- **Domain-scoped** decisions that travel together keep a prefix + sequence (e.g. the `DB-*`
+  datasource/migration thread). The prefix groups them; the sequence orders them within the group.
+- **Deferred** and **skipped** items are not numbered — they live in their tables until a flip
+  trigger promotes a deferred item, at which point it becomes the next `ADR-<n>`.
+
+### Status lifecycle
+
+| Status | Meaning | Lives in |
+|---|---|---|
+| **proposed** | written down, not yet agreed; needs owner sign-off before execution | its own heading with a ⚠️ note (see DB-1) |
+| **accepted** | the decision in force today; code should match it | **Adopted now** table |
+| **deferred** | consciously not done yet; has an explicit **flip trigger** | **Deferred** table |
+| **superseded** | replaced by a later decision; kept for history, not in force | struck-through in place, pointing at the new ADR |
+| **skipped** | ruled out at this scale, no trigger | **Skipped** list |
+
+A decision moves **proposed → accepted** only after the owner sign-off its note calls for. It moves
+**deferred → accepted** only when its flip trigger actually fires.
+
+### Adding a decision
+
+1. Append a row to **Adopted now** with the next `ADR-<n>`, a one-line **Decision** and a one-line
+   **Rationale** (cite the backlog/gap-analysis item that drove it).
+2. If it is not ready to execute, add it as **proposed** (its own heading + a ⚠️ owner-decision note)
+   instead, and promote it to the table once accepted.
+3. If it is a "not now" choice, put it in **Deferred** with a concrete **flip trigger**, or in
+   **Skipped** if there is no trigger.
+
+Keep it to one line per decision. Detail belongs in the referenced doc, not here.
+
+### Superseding a decision
+
+- Never silently edit an accepted decision to mean something new. Instead add a **new** `ADR-<n>` that
+  states the replacement, then mark the old row **superseded by ADR-<n>** (strike-through) and leave
+  it in place. The history of what was true, and when it changed, stays visible.
+- A superseding ADR names the owner call / date that authorized the change (as `ADR-3` records the
+  2026-11-14 transport decision).
+
+### Per-phase flip-trigger review
+
+Deferred items carry a flip trigger precisely so they are not forgotten. At the **start of each
+phase** (and whenever a phase's scope is cut), walk the **Deferred** table and, for each row, ask:
+*has this phase's work made the trigger true?*
+
+- **Yes** → promote it to an accepted `ADR-<n>` and schedule the work in that phase's plan.
+- **No** → leave it deferred; if the trigger is now wrong, update the trigger wording (not the
+  decision).
+
+This review is the mechanism that keeps "defer with a trigger" honest — a deferred decision that is
+never re-examined is just a decision that was quietly skipped.

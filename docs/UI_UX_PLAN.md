@@ -1,5 +1,7 @@
 # UI/UX review & implementation plan
 
+> **Planning doc — not the source of truth.** The **backlog** ([architecture/backlog.md](architecture/backlog.md)) and the **shipped `client/` code** are authoritative. For the UI/UX actually built and verified, see the **Execution Log** ([architecture/EXECUTION_LOG.md](architecture/EXECUTION_LOG.md)) (Phase 4 Creation Studio, Automations/Approvals/Insights, agent-detail panels). This document is the original review + plan and may lag what shipped.
+
 Honest assessment of the current `client/` against [UX_PRINCIPLES.md](UX_PRINCIPLES.md), the gaps for a
 **web + mobile-friendly, invisible-UI, AI-agentic** product, and a prioritized plan to close them.
 

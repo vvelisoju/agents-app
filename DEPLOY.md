@@ -1,11 +1,37 @@
 # Deployment Guide
 
-Two options. Pick one.
+> **Source of truth: the code. Last reconciled 2026-11-14.** (PXD-24)
+> Corrected from an earlier draft: schema changes are applied in prod with **`prisma migrate deploy`**
+> (forward-only, reviewed SQL, history) — **never the old destructive `prisma db push` on boot**. `db push`
+> is a **dev-only** convenience for the local SQLite DB. There is **no Redis / message broker** in the
+> stack: the job queue is a Postgres table and realtime is an in-memory WebSocket fan-out
+> (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). Don't provision one.
+
+**What actually runs in production:** **Option C — Railway.** The frontend is on **Vercel**
+(`agents.codevel.com`), the API on **Railway** (`api.agents.codevel.com`), both deploying on push to
+`main`. Options A and B below are the generic VPS/split recipes; read **Option C** first if you're
+touching the live deploy.
+
+Three options. Pick one.
 
 | Option | Client | Server | Best for |
 |--------|--------|--------|---------|
 | **A — Full Docker** | nginx container (port 80) | Express container | Single VPS, simplest |
 | **B — Split** | Vercel / Netlify | Docker on VPS | CDN edge + separate API host |
+| **C — Railway** | Vercel | Railway (1 container) | **The live deploy** (`agents.codevel.com`) |
+
+## Database & migrations (read before any option)
+
+- **Prod** boots `server/docker-entrypoint.sh`, which runs **`prisma migrate deploy --schema
+  prisma/schema.postgres.prisma`** (retries if the DB is still starting), then starts the server. Only
+  **new** migrations are applied; the baseline (`0_init`) is marked applied on the existing prod DB.
+- **`DATABASE_URL` must be a PostgreSQL URL in prod.** The container applies migrations against it on
+  every deploy.
+- **Never run `prisma db push` against prod** — it is destructive and historyless. It is only for the
+  local **SQLite** dev DB (see [docs/DEV.md](docs/DEV.md)).
+- To add a schema change: edit `prisma/schema.prisma`, run `npm run db:gen-pg`, create a reviewed
+  migration (`prisma migrate dev --schema prisma/schema.postgres.prisma`), and commit it. It applies on
+  the next deploy.
 
 ---
 
@@ -46,7 +72,9 @@ nano server/.env.production      # fill in the values below
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Your key from console.anthropic.com |
 | `CORS_ORIGIN` | Your domain, e.g. `https://app.secure.studio` |
-| `DATABASE_URL` | Leave as `file:./prod.db` for SQLite, or a postgres URL |
+| `DATABASE_URL` | A **PostgreSQL** URL (e.g. the Compose `postgres` service). The server image applies `prisma migrate deploy` against it on boot — SQLite is dev-only. |
+| `ENCRYPTION_KEY` | 32-byte secret (hex/base64) for secrets-at-rest; the server refuses to boot without it |
+| `WIDGET_SIGNING_SECRET` | Long random string; signs website widget keys |
 
 Leave `PORT=4000` as-is — docker-compose handles port mapping.
 
@@ -128,24 +156,22 @@ Only the changed service(s) are rebuilt. Volumes (database, WhatsApp sessions) a
 
 ---
 
-### 7. Database: SQLite → PostgreSQL (optional)
+### 7. Database: PostgreSQL
 
-The default is SQLite (`file:./prod.db`), which is fine for a single-server setup.
+Production runs on **PostgreSQL**. The committed `prisma/schema.postgres.prisma` + the migrations in
+`prisma/migrations/` are the source of truth; the server image generates the Postgres client at build and
+applies migrations at boot (no build-time provider swap). For a Compose Postgres:
 
-To switch to Postgres:
-
-1. In `server/.env.production`, set:
+1. In `server/.env.production`, set a Postgres URL:
    ```
    DATABASE_URL=postgresql://postgres:agents@postgres:5432/agents
    ```
-2. In `server/prisma/schema.prisma`, change:
-   ```
-   provider = "postgresql"
-   ```
-3. In `docker-compose.yml`, uncomment the `DATABASE_URL` line under `server`.
-4. Redeploy: `docker compose up --build -d`
+2. In `docker-compose.yml`, uncomment the `DATABASE_URL` line under `server`.
+3. Redeploy: `docker compose up --build -d`
 
-The first boot runs `prisma db push` which creates all tables automatically.
+On boot, `docker-entrypoint.sh` runs **`prisma migrate deploy`**, which applies any pending migrations
+(creating the tables on a fresh DB). It is **not** `db push` and never drops columns. If the DB is slow
+to start, the entrypoint retries a few times before failing loudly.
 
 ---
 
@@ -201,7 +227,7 @@ deploy or restart wipes `/app/.wwebjs_auth`, so each connected WhatsApp agent dr
 | Symptom | Fix |
 |---------|-----|
 | `docker compose` not found | Use `docker-compose` (v1) or install `docker-compose-plugin` |
-| Server crashes on start | Run `docker compose logs server` — usually a missing env var or DB migration error |
+| Server crashes on start | Run `docker compose logs server` — usually a missing required env var (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `ENCRYPTION_KEY`, `WIDGET_SIGNING_SECRET`, `CORS_ORIGIN`) or a failed `prisma migrate deploy` (check the migration SQL / DB reachability) |
 | **WhatsApp shows "Scan QR" again after every deploy (Railway)** | The session dir isn't on a persistent volume. Add a Railway Volume at `/data` + set `WWEBJS_DATA_PATH=/data/wwebjs_auth`, then scan once (see **Option C**). |
 | WhatsApp QR keeps resetting (Docker Compose) | The `wa_auth` volume may have been deleted; rescan once and it persists |
 | `ANTHROPIC_API_KEY not set` warning | Add the key to `server/.env.production` and restart: `docker compose restart server` |
@@ -218,8 +244,11 @@ PersonalAgents/
 ├── server/
 │   ├── Dockerfile             ← server image (Node + Chromium)
 │   ├── .dockerignore
+│   ├── docker-entrypoint.sh   ← runs `prisma migrate deploy`, then starts the server
 │   ├── .env.production.example ← template — copy to .env.production
-│   └── prisma/schema.prisma   ← change provider here for PostgreSQL
+│   ├── prisma/schema.prisma            ← dev/test schema (SQLite)
+│   ├── prisma/schema.postgres.prisma   ← prod schema (generated; `npm run db:gen-pg`)
+│   └── prisma/migrations/              ← committed, forward-only prod migrations
 └── client/
     ├── Dockerfile             ← multi-stage build → nginx
     ├── .dockerignore

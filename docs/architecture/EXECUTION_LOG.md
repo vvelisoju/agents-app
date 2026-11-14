@@ -259,3 +259,16 @@ booking (per-agent calendar.book) · Agentic tools (per-agent executionMode).
 | DB-17 / QA-48 DR restore drill | Railway backup access (owner) |
 | QA-46 / QA-47 NFR ceiling + 2nd-replica | Target-box metrics + a 2nd replica (owner) |
 | Any live QR / Telegram / Razorpay E2E | A phone to scan, a bot token, Razorpay keys (owner) |
+
+---
+
+## Model gateway & cost — where it lives now
+
+The Phase-2 model gateway, per-reply cost/token trace, per-tenant budget gate, metrics and retention
+are documented in full in **[../OBSERVABILITY.md](../OBSERVABILITY.md)**. In brief: every produced
+reply goes through `lib/model-gateway.ts` (timeout/retry/usage) and writes one additive, fire-and-forget
+`UsageEvent` row via `lib/trace.ts` (model/tokens/cost from `lib/pricing.ts`/latency/outcome); the
+agentic loop adds one `ExecutionStep` per tool call; `lib/budget.ts` enforces a daily per-tenant cap
+(`budget_exceeded` outcome) before every turn. Reply-mode runs are byte-for-byte unchanged. For the
+table shapes, the owner-facing metrics, and the retention sweeps, see OBSERVABILITY.md (pairs with
+SECURITY.md and OPERATIONS.md).
