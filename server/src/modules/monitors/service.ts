@@ -60,16 +60,17 @@ export function listWatches(orgId: string, agentId: string) {
   return prisma.watch.findMany({ where: { orgId, agentId }, orderBy: { createdAt: 'desc' } });
 }
 
-export async function setWatchActive(orgId: string, watchId: string, active: boolean) {
-  const watch = await prisma.watch.findFirst({ where: { id: watchId, orgId } });
+export async function setWatchActive(orgId: string, agentId: string, watchId: string, active: boolean) {
+  // Scope by agentId too: a watch belongs to one agent, so a sibling agent's route must not touch it.
+  const watch = await prisma.watch.findFirst({ where: { id: watchId, orgId, agentId } });
   if (!watch) return null;
   // Pause/resume the paired Trigger too, so a paused watch stops being scheduled.
   if (watch.triggerId) await prisma.trigger.update({ where: { id: watch.triggerId }, data: { enabled: active } }).catch(() => {});
   return prisma.watch.update({ where: { id: watch.id }, data: { active } });
 }
 
-export async function deleteWatch(orgId: string, watchId: string): Promise<boolean> {
-  const watch = await prisma.watch.findFirst({ where: { id: watchId, orgId } });
+export async function deleteWatch(orgId: string, agentId: string, watchId: string): Promise<boolean> {
+  const watch = await prisma.watch.findFirst({ where: { id: watchId, orgId, agentId } });
   if (!watch) return false;
   if (watch.triggerId) await prisma.trigger.delete({ where: { id: watch.triggerId } }).catch(() => {});
   await prisma.watch.delete({ where: { id: watch.id } });

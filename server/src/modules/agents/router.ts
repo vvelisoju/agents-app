@@ -190,14 +190,14 @@ scoped.post('/watches', requirePermission('train_edit'), asyncHandler(async (req
 
 scoped.patch('/watches/:watchId', requirePermission('train_edit'), asyncHandler(async (req, res) => {
   const { setWatchActive } = await import('../monitors/service');
-  const watch = await setWatchActive((req as any).user.orgId, String(req.params.watchId), !!req.body?.active);
+  const watch = await setWatchActive((req as any).user.orgId, agent(req).id, String(req.params.watchId), !!req.body?.active);
   if (!watch) return res.status(404).json({ error: 'not found' });
   res.json(watch);
 }));
 
 scoped.delete('/watches/:watchId', requirePermission('train_edit'), asyncHandler(async (req, res) => {
   const { deleteWatch } = await import('../monitors/service');
-  const ok = await deleteWatch((req as any).user.orgId, String(req.params.watchId));
+  const ok = await deleteWatch((req as any).user.orgId, agent(req).id, String(req.params.watchId));
   if (!ok) return res.status(404).json({ error: 'not found' });
   audit({ orgId: (req as any).user.orgId, actorUserId: (req as any).user.id, action: 'watch.delete', targetType: 'watch', targetId: String(req.params.watchId) });
   res.json({ ok: true });

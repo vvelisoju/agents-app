@@ -66,9 +66,9 @@ describe('monitor — Watch CRUD + SSRF (SCN-42)', () => {
     const org = await createOrg();
     const agent = await createAgent(org.id);
     const w = await createWatch({ orgId: org.id, agentId: agent.id, url: PUBLIC_URL });
-    await setWatchActive(org.id, w.id, false);
+    await setWatchActive(org.id, agent.id, w.id, false);
     expect((await prisma.trigger.findUnique({ where: { id: w.triggerId! } }))?.enabled).toBe(false);
-    expect(await deleteWatch(org.id, w.id)).toBe(true);
+    expect(await deleteWatch(org.id, agent.id, w.id)).toBe(true);
     expect(await prisma.watch.count({ where: { id: w.id } })).toBe(0);
     expect(await prisma.trigger.count({ where: { id: w.triggerId! } })).toBe(0);
   });
@@ -78,7 +78,7 @@ describe('monitor — Watch CRUD + SSRF (SCN-42)', () => {
     const agent = await createAgent(org.id);
     const w = await createWatch({ orgId: org.id, agentId: agent.id, url: PUBLIC_URL });
     const other = await createOrg();
-    expect(await deleteWatch(other.id, w.id)).toBe(false);
+    expect(await deleteWatch(other.id, agent.id, w.id)).toBe(false);
   });
 });
 
