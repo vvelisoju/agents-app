@@ -189,10 +189,20 @@ flip when a tenant KB exceeds the prompt budget).
 | **1 — Phase-6 finish** | TOOL-07/13/16/18/25/26/29 (above) | ✅ |
 | 2 — RAG decision/core (MK) | pgvector — mostly deferred by design; confirm scope | ⬜ |
 | 3 — UX breadth | ✅ Approvals inbox (POL-16/20, inbox-approve resumes campaign runs) · ✅ Insights page (OBS client) · ✅ nav (Automations/Approvals/Insights, SCN-38). Remaining: connected-accounts (needs new backend), SCN-37 scenario picker (lower value — scenario tabs already exist) | 🔨 |
-| 4 — QA + PXD sweep | remaining test coverage + docs across modules | ⬜ |
-| 5 — Owner-gated checklist | SEC token-hash, NOT-NULL, DR drill, Phase-7 — **needs owner** | ⬜ |
+| 4 — QA + PXD sweep | ✅ **Parallel fan-out (5 subagents):** API tests monitors/outbound/tools (+21), `docs/DATA_MODEL.md`, `docs/OPERATIONS.md` (ops runbook). Fan-out surfaced + fixed a watch agent-scoping isolation bug. Core modules (leads/team/billing/analytics/auth) already smoke-covered by `api.test.ts`. | ✅ |
+| 5 — Owner-gated checklist | SEC token-hash, NOT-NULL enforcement, DR drill, Phase-7 scale-out, **enabling the flags in prod** — see `docs/OPERATIONS.md` | ⏸️ **needs owner** |
 
-**Baseline:** 220 tests green, server+client tsc clean. 7 migrations applied to Railway prod total; reply path
+**Baseline:** 241 tests green (37 files), server+client tsc clean. Test gate ~65s (flat).
+
+### Completion posture
+Phases 0–6 are **core-complete + tested**. What remains is not more autonomous code:
+- **Owner-gated (⏸️):** SEC-3/4/5 token hashing (mass re-login — maintenance window), orgId NOT-NULL enforcement
+  (after a prod-scale rehearsal), DR restore drill, Phase-7 scale-out, and **turning WORKFLOW/MONITOR/OUTBOUND_ENABLED
+  on in Railway** (runbook in `docs/OPERATIONS.md`).
+- **Deferred by design:** MK-* pgvector RAG (small KBs stay prompt-stuffed; flip when a tenant KB exceeds the
+  prompt budget), plus the §7 "triggered" scale-out items.
+- **Optional polish:** connected-accounts UI (needs new backend), SCN-37 scenario picker (tabs already exist),
+  additional deep test coverage on top of existing smoke tests. 7 migrations applied to Railway prod total; reply path
 byte-for-byte throughout; all new runtime behavior flag-/executionMode-gated (prod unchanged until enabled).
 
 ### Scenarios on the spine (gated/opt-in)
