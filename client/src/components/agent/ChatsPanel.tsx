@@ -7,7 +7,34 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ChevronRight, Hand, BellOff, Bell, ArrowLeft, Send } from 'lucide-react';
+import { ChevronRight, Hand, BellOff, Bell, ArrowLeft, Send, Brain, X } from 'lucide-react';
+
+// MK-14 — what the agent remembers about this contact, with a forget (×) on each fact. Renders
+// nothing when the memory feature is off or there is nothing stored, so it never adds noise.
+type Memory = { id: string; key: string; value: string };
+function ContactMemory({ id, contact }: { id: string; contact: string }) {
+  const key = ['/api/agents/' + id + '/memory?contact=' + encodeURIComponent(contact)];
+  const { data } = useQuery<{ memories: Memory[] }>({ queryKey: key, enabled: !!contact, retry: false });
+  const forget = useMutation({
+    mutationFn: (mid: string) => apiRequest('DELETE', `/api/agents/${id}/memory/${mid}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+  const memories = data?.memories || [];
+  if (memories.length === 0) return null;
+  return (
+    <div className="border-t border-border px-3 py-2">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><Brain size={12} /> What the agent remembers</div>
+      <div className="flex flex-wrap gap-1.5">
+        {memories.map((m) => (
+          <span key={m.id} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">
+            <span className="text-muted-foreground">{m.key}:</span> <span className="font-medium">{m.value}</span>
+            <button className="text-muted-foreground hover:text-destructive disabled:opacity-50" title="Forget this" disabled={forget.isPending} onClick={() => forget.mutate(m.id)}><X size={11} /></button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ChatsPanel({ id }: { id: string }) {
   const { toast } = useToast();
@@ -62,6 +89,8 @@ export function ChatsPanel({ id }: { id: string }) {
             </div>
           ))}
         </div>
+
+        <ContactMemory id={id} contact={conv.contactNumber} />
 
         {conv.takenOver && (
           <div className="flex gap-2 border-t border-border p-3">
