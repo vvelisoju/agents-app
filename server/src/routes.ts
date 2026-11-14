@@ -15,7 +15,7 @@ import { audit } from './lib/audit';
 import { asyncHandler } from './middleware/asyncHandler';
 import { TEMPLATES } from './lib/templates';
 import { listAdapters } from './channels/registry';
-import { workflowEnabled, monitorEnabled } from './lib/spineEnv';
+import { workflowEnabled, monitorEnabled, outboundEnabled } from './lib/spineEnv';
 
 // Mount every API module. One aggregator (ClassPe pattern).
 export function registerRoutes(app: Express) {
@@ -37,7 +37,7 @@ export function registerRoutes(app: Express) {
   // Server-authoritative feature flags so the UI only surfaces a scenario when its handler
   // is actually enabled (no dead-end controls). SCN-36 scenario flags + the spine flag.
   app.get('/api/config', authMiddleware, (_req, res) =>
-    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled() } }),
+    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled() } }),
   );
   app.get('/api/templates', authMiddleware, (_req, res) =>
     res.json(TEMPLATES.map((t) => ({ id: t.id, label: t.label, emoji: t.emoji }))),

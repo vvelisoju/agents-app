@@ -13,6 +13,7 @@ import { TestPanel } from '@/components/agent/TestPanel';
 import { ChatsPanel } from '@/components/agent/ChatsPanel';
 import { VersionsPanel } from '@/components/agent/VersionsPanel';
 import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
+import { CampaignsPanel } from '@/components/agent/CampaignsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -110,6 +111,7 @@ export function AgentDetail({ id }: { id: string }) {
               { id: 'test', label: 'Test' },
               { id: 'chats', label: 'Chats' },
               ...(config?.features?.monitor ? [{ id: 'monitors', label: 'Monitors' }] : []),
+              ...(config?.features?.outbound ? [{ id: 'campaigns', label: 'Campaigns' }] : []),
               { id: 'versions', label: 'Versions' },
             ]}
             value={tab}
@@ -119,6 +121,7 @@ export function AgentDetail({ id }: { id: string }) {
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
           {tab === 'monitors' && config?.features?.monitor && <MonitorsPanel id={id} />}
+          {tab === 'campaigns' && config?.features?.outbound && <CampaignsPanel id={id} />}
           {tab === 'versions' && <VersionsPanel id={id} />}
         </div>
       </div>
