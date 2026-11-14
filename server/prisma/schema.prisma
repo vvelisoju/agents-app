@@ -211,6 +211,26 @@ model UsageEvent {
   @@index([orgId, createdAt]) // DB-12: analytics aggregation
 }
 
+// TOOL-29 — per-tool-call step trace for the agentic path. One row per tool invocation, keyed
+// to the run's executionId (the Phase-2 UsageEvent trace is one row per run, with no per-step
+// field). Reply-mode runs write zero rows. Input is stored redacted; secrets never land here.
+model ExecutionStep {
+  id            String   @id @default(uuid())
+  orgId         String
+  agentId       String
+  executionId   String
+  stepIndex     Int
+  toolName      String
+  inputJson     String   @default("{}") // redacted
+  outcome       String // ok | invalid_input | invalid_output | timeout | denied | pending_approval | error
+  approvalState String? // inline | pending_approval | pre_approved
+  latencyMs     Int?
+  createdAt     DateTime @default(now())
+
+  @@index([executionId, stepIndex])
+  @@index([orgId, createdAt])
+}
+
 // POL-06 — generalized approval queue. Message.status='draft' (approve-before-send) is
 // the first instance; bulk send / booking / delete / financial become additional rows.
 model Approval {

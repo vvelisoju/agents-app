@@ -88,7 +88,7 @@ export async function runAgenticLoop(input: AgenticInput): Promise<AgenticResult
           toolResults.push(resultBlock(call, 'that tool is not available', true));
           continue;
         }
-        const r = await executeTool(tool, call.input, input.ctx);
+        const r = await executeTool(tool, call.input, input.ctx, { stepIndex: steps.length });
         if (r.ok) {
           steps.push({ tool: call.name, ok: true });
           toolResults.push(resultBlock(call, JSON.stringify(r.output), false));

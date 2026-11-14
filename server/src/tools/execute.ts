@@ -4,7 +4,8 @@
 // read/idempotent tools, validates output, dedupes within an execution, and emits exactly one
 // structured log line. The error contract is a discriminated ToolResult.
 import { createHash } from 'node:crypto';
-import { log } from '../lib/log';
+import prisma from '../lib/prisma';
+import { log, redact } from '../lib/log';
 import { createApproval } from '../policy/approvals';
 import type { Tool, ToolContext, ToolResult } from './types';
 
@@ -23,18 +24,41 @@ function inputHash(name: string, input: unknown): string {
   return createHash('sha256').update(name + ':' + JSON.stringify(input ?? null)).digest('hex').slice(0, 16);
 }
 
+// Store tool input in the step trace with sensitive keys masked and a hard size cap.
+function safeInput(input: unknown): string {
+  try {
+    const red = input && typeof input === 'object' ? redact(input as Record<string, unknown>) : input;
+    return JSON.stringify(red ?? {}).slice(0, 2_000);
+  } catch { return '{}'; }
+}
+
 // In-execution idempotency: the same (executionId, tool, input) resolves to one shared run.
 const inflight = new Map<string, Promise<ToolResult>>();
 
 export interface ExecuteOpts {
   /** Set by the approval executor to actually run a previously-gated write/external tool. */
   preApproved?: boolean;
+  /** Ordinal of this call within an agentic run, for the TOOL-29 step trace. */
+  stepIndex?: number;
 }
 
 export async function executeTool(tool: Tool, input: unknown, ctx: ToolContext, opts: ExecuteOpts = {}): Promise<ToolResult> {
   const started = Date.now();
-  const emit = (outcome: string, extra?: Record<string, unknown>) =>
-    log.info('tool', { tool: tool.name, sideEffect: tool.sideEffect, outcome, latencyMs: Date.now() - started, orgId: ctx.orgId, agentId: ctx.agent?.id, ...extra });
+  const emit = (outcome: string, extra?: Record<string, unknown>) => {
+    const latencyMs = Date.now() - started;
+    log.info('tool', { tool: tool.name, sideEffect: tool.sideEffect, outcome, latencyMs, orgId: ctx.orgId, agentId: ctx.agent?.id, ...extra });
+    // TOOL-16/29: one redacted step row per call, keyed to the run's executionId. Reply-mode
+    // runs never call executeTool, so they write zero rows. Fire-and-forget; never blocks.
+    if (ctx.executionId && opts.stepIndex != null && ctx.agent?.id) {
+      const approvalState = opts.preApproved ? 'pre_approved' : outcome === 'pending_approval' ? 'pending_approval' : 'inline';
+      prisma.executionStep.create({
+        data: {
+          orgId: ctx.orgId, agentId: ctx.agent.id, executionId: ctx.executionId, stepIndex: opts.stepIndex,
+          toolName: tool.name, inputJson: safeInput(input), outcome, approvalState, latencyMs,
+        },
+      }).catch(() => { /* trace write must never break a tool call */ });
+    }
+  };
 
   // 1) input validation
   const parsed = tool.inputSchema.safeParse(input);

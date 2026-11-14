@@ -6,6 +6,7 @@ import './knowledge';
 import './crm';
 import './web';
 import './calendar';
+import './channel';
 import { registerApprovalRunner } from '../approvalRunner';
 
 // POL-10/TOOL-19: run a gated tool for real when its Approval is approved.

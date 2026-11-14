@@ -107,6 +107,27 @@ scoped.put('/tools', requirePermission('train_edit'), asyncHandler(async (req, r
   res.json({ ok: true, tools: requested, executionMode: updated.executionMode });
 }));
 
+// TOOL-18 — recent tool executions for this agent, grouped by executionId (newest first), each
+// with its ordered step trace. Powers the client execution viewer.
+scoped.get('/executions', asyncHandler(async (req, res) => {
+  const steps = await prisma.executionStep.findMany({
+    where: { orgId: (req as any).user.orgId, agentId: agent(req).id },
+    orderBy: { createdAt: 'desc' },
+    take: 300,
+  });
+  const byExec = new Map<string, any[]>();
+  for (const s of steps) {
+    if (!byExec.has(s.executionId)) byExec.set(s.executionId, []);
+    byExec.get(s.executionId)!.push(s);
+  }
+  const executions = [...byExec.entries()].slice(0, 30).map(([executionId, rows]) => ({
+    executionId,
+    at: rows[0].createdAt,
+    steps: rows.sort((a, b) => a.stepIndex - b.stepIndex).map((r) => ({ stepIndex: r.stepIndex, tool: r.toolName, outcome: r.outcome, approvalState: r.approvalState, latencyMs: r.latencyMs })),
+  }));
+  res.json({ executions });
+}));
+
 function parseEnabledTools(a: any): string[] {
   try { const x = JSON.parse(a.enabledToolsJson || '[]'); return Array.isArray(x) ? x.filter((v) => typeof v === 'string') : []; }
   catch { return []; }

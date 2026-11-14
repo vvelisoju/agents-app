@@ -15,6 +15,7 @@ import { VersionsPanel } from '@/components/agent/VersionsPanel';
 import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
 import { CampaignsPanel } from '@/components/agent/CampaignsPanel';
 import { AbilitiesPanel } from '@/components/agent/AbilitiesPanel';
+import { ActivityPanel } from '@/components/agent/ActivityPanel';
 import { BookingsPanel } from '@/components/agent/BookingsPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
@@ -124,7 +125,7 @@ export function AgentDetail({ id }: { id: string }) {
             onChange={setTab}
           />
           {tab === 'train' && <TrainingPanel id={id} />}
-          {tab === 'abilities' && <AbilitiesPanel id={id} />}
+          {tab === 'abilities' && <div className="space-y-4"><AbilitiesPanel id={id} /><ActivityPanel id={id} /></div>}
           {tab === 'bookings' && canBook && <BookingsPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}

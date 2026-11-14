@@ -85,6 +85,8 @@ export async function specFromAgent(agentId: string): Promise<AgentSpec | null> 
         }
       : {},
     knowledge: sources.map((s) => ({ type: s.type as 'fact' | 'faq' | 'link', data: safeJson(s.dataJson), enabled: s.enabled })),
+    // TOOL-13: the agent's enabled tools round-trip through the spec + version snapshots.
+    tools: (agent as any).enabledToolsJson ? safeJson((agent as any).enabledToolsJson) : [],
     behavior: {
       approval: agent.autoSend ? 'auto' : 'draft',
       hoursStart: agent.hoursStart,
@@ -116,7 +118,10 @@ export async function applySpec(agentId: string, spec: AgentSpec): Promise<void>
       awayMessage: spec.behavior.awayMessage,
       alertNumber: spec.behavior.alertNumber,
       alertCondition: spec.behavior.alertCondition,
-    },
+      // TOOL-13: compile enabled tools back; a non-empty tool set runs the agentic path.
+      enabledToolsJson: JSON.stringify(spec.tools ?? []),
+      executionMode: (spec.tools?.length ?? 0) > 0 ? 'agentic' : 'reply',
+    } as any,
   });
 
   await prisma.trainingProfile.upsert({
