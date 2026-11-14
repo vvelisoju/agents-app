@@ -19,17 +19,17 @@ model Org {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  orgId        String
-  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  phone        String   @unique // normalized 10-digit local mobile (digits only)
-  passwordHash String
-  token        String   @unique
+  id             String    @id @default(uuid())
+  orgId          String
+  org            Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  phone          String    @unique // normalized 10-digit local mobile (digits only)
+  passwordHash   String
+  token          String    @unique
   tokenHash      String?   @unique // SEC-4: hashed bearer token (replaces plaintext lookups)
   tokenExpiresAt DateTime? // SEC-5: token expiry
   lastLoginAt    DateTime?
-  role         String   @default("owner")
-  createdAt    DateTime @default(now())
+  role           String    @default("owner")
+  createdAt      DateTime  @default(now())
 }
 
 // One-time codes for WhatsApp OTP (signup + password reset). Code is bcrypt-hashed.
@@ -58,36 +58,36 @@ model Subscription {
 }
 
 model Agent {
-  id            String           @id @default(uuid())
-  orgId         String
-  org           Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name          String
-  channelType   String           @default("whatsapp-web")
-  status        String           @default("draft")
-  autoSend      Boolean          @default(false)
-  executionMode String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop, later)
-  currentVersionId String?       // SPEC: active AgentVersion pointer; null = live-edit mode (default)
-  lifecycleStatus  String        @default("draft") // SPEC: draft | active | paused | archived (NOT connection status)
-  paused        Boolean          @default(false)
-  awayMessage   String?
-  hoursStart    Int?
-  hoursEnd      Int?
-  timezone      String           @default("Asia/Kolkata")
+  id               String           @id @default(uuid())
+  orgId            String
+  org              Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name             String
+  channelType      String           @default("whatsapp-web")
+  status           String           @default("draft")
+  autoSend         Boolean          @default(false)
+  executionMode    String           @default("reply") // MGW-4: 'reply' (default) | 'agentic' (opt-in tool loop, later)
+  currentVersionId String? // SPEC: active AgentVersion pointer; null = live-edit mode (default)
+  lifecycleStatus  String           @default("draft") // SPEC: draft | active | paused | archived (NOT connection status)
+  paused           Boolean          @default(false)
+  awayMessage      String?
+  hoursStart       Int?
+  hoursEnd         Int?
+  timezone         String           @default("Asia/Kolkata")
   // Owner alerts: the agent WhatsApps the owner at this number (digits only) when
   // a conversation matches `alertCondition`. Null/empty number = alerts off.
   // Delivered via the agent's own channel session.
-  alertNumber   String?
+  alertNumber      String?
   // When to alert, in the OWNER'S OWN WORDS (free text, business-specific). Blank
   // falls back to a sensible default. This is what makes alerting generic — every
   // business decides its own trigger (urgent lead, complaint, bulk order, VIP, …).
-  alertCondition String?
-  channelConfig String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
-  createdAt     DateTime         @default(now())
-  profile       TrainingProfile?
-  sources       TrainingSource[]
-  conversations Conversation[]
-  session       ChannelSession?
-  versions      AgentVersion[]
+  alertCondition   String?
+  channelConfig    String? // JSON: per-channel settings, e.g. {"botToken":"..."} for Telegram
+  createdAt        DateTime         @default(now())
+  profile          TrainingProfile?
+  sources          TrainingSource[]
+  conversations    Conversation[]
+  session          ChannelSession?
+  versions         AgentVersion[]
 }
 
 // SPEC-1 — immutable published snapshots of an agent's full config (the AgentSpec JSON),
@@ -259,4 +259,97 @@ model ConnectedAccount {
 
   @@index([orgId])
   @@index([agentId])
+}
+
+// ─── Phase 5: Event / Trigger / Workflow spine (all gated behind WORKFLOW_ENABLED) ───
+
+// EWS-01 — transactional outbox (CloudEvents field-shape). NOT a broker: a dispatcher
+// drains unprocessed rows and matches them to Triggers. Written fire-and-forget.
+model DomainEvent {
+  id             String    @id @default(uuid())
+  orgId          String
+  source         String // e.g. "engine" | "billing" | "lead"
+  type           String // e.g. "message.received" | "lead.created" | "billing.payment"
+  subject        String?
+  dataJson       String    @default("{}")
+  idempotencyKey String?   @unique
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([processedAt])
+  @@index([orgId, type])
+}
+
+// EWS-02 — binds a source signal (event | cron | webhook) to a registered workflow handler.
+model Trigger {
+  id          String    @id @default(uuid())
+  orgId       String
+  agentId     String?
+  kind        String // event | cron | webhook
+  eventType   String?
+  cronExpr    String?
+  filterJson  String    @default("{}")
+  handlerName String
+  enabled     Boolean   @default(true)
+  nextRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([enabled, kind])
+  @@index([eventType])
+}
+
+// EWS-03 — the runner's claimable unit of work. idempotencyKey @unique blocks double-enqueue;
+// lease/leaseUntil give single-owner execution and crash reclaim.
+model Job {
+  id             String    @id @default(uuid())
+  orgId          String
+  workflowRunId  String?
+  handlerName    String
+  status         String    @default("pending") // pending | leased | running | completed | failed | dead
+  nextRunAt      DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  stateJson      String    @default("{}")
+  lease          String?
+  leaseUntil     DateTime?
+  idempotencyKey String?   @unique
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([leaseUntil])
+  @@index([orgId])
+}
+
+// EWS-04 — a durable multi-step run + its append-only step history (reconstructable/replayable).
+model WorkflowRun {
+  id           String    @id @default(uuid())
+  orgId        String
+  agentId      String?
+  workflowName String
+  status       String    @default("running") // running | sleeping | awaiting_approval | paused | completed | failed | canceled
+  currentStep  String?
+  stateJson    String    @default("{}")
+  approvalId   String?
+  startedAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  finishedAt   DateTime?
+
+  steps WorkflowStepLog[]
+
+  @@index([orgId, status])
+  @@index([agentId])
+}
+
+model WorkflowStepLog {
+  id         String      @id @default(uuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepName   String
+  result     String // complete | retry | sleep | awaitApproval | fail
+  detailJson String      @default("{}")
+  createdAt  DateTime    @default(now())
+
+  @@index([runId, createdAt])
 }

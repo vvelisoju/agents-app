@@ -8,6 +8,7 @@ import { attachWs } from './lib/realtime';
 import { assertProdSecrets } from './lib/env';
 import './channels/whatsapp'; // register the WhatsApp adapter
 import * as wa from './channels/whatsapp';
+import { startSpine, stopSpine } from './jobs/spine'; // EWS-14: Phase-5 spine (gated by WORKFLOW_ENABLED)
 
 assertProdSecrets(); // SEC-17: die loudly in prod if a required secret is missing
 const app = buildApp();
@@ -27,4 +28,18 @@ server.listen(PORT, async () => {
   } catch (e: any) {
     console.error('session restore error:', e?.message || e);
   }
+  // EWS-14: start the workflow spine only when explicitly enabled (default off).
+  if (startSpine()) console.log('   ⚙️  Workflow spine enabled (runner + scheduler).');
 });
+
+// EWS-14: on redeploy, stop the tickers and release held leases so no job is stranded.
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await stopSpine();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5_000).unref();
+  });
+}
