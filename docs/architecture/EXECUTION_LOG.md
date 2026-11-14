@@ -72,9 +72,28 @@ new orgId columns (after DB-24 prod-scale rehearsal — owner) · DB-17/QA-48 DR
 **93 tests, tsc clean. 18 commits.** Reply path byte-for-byte unchanged.
 
 ### Phase 2 — remaining
-OBS-11/12/13 analytics `/executions` + `/metrics` endpoints · OBS-19/20/21 client execution viewer + metric tiles ·
-MGW-14/OBS-15 `/api/health/ready` · MGW-7/8 runtime facade + loader · MGW-15/16/UX-20/21 client usage/cost surface.
-Then **Phase 3** (policy/approvals/audit/identity — migration-backed, now unblocked).
+OBS-11/13 `/executions`+`/metrics` ✅ · OBS-15 `/health/ready` ✅. Left: OBS-19/20/21 client execution viewer
+(client UX) · MGW-7/8 runtime facade/loader · MGW-15/16 client usage/cost surface.
+
+### Phase 3 — Policy, approvals, audit & identity (core DONE)
+| Task | Status | Notes |
+|---|---|---|
+| POL-06/12 + SEC-7 migration | ✅ | Approval/AuditLog/ConnectedAccount tables + User token-hardening columns **applied to Railway prod**. |
+| POL-01/02 policy engine · lib/audit · lib/connectedAccount · lib/tokenAuth | ✅ | **Parallel-authored** (4 modules + tests, 22 tests) then integrated. |
+| POL-03/04/14/15 authz chokepoint + audit | ✅ | `middleware/authz.ts` gates delete-agent/org-rename/lead-export/audit-view via the policy engine; denials + sensitive actions audited; owner-only `/api/audit`. |
+| POL-07/08/09 approval queue | ✅ | `policy/approvals.ts` + `/api/approvals` (idempotent, tenant-scoped, audited); existing draft flow unchanged. |
+
+**126 tests green, tsc clean. 19 commits.** Member day-to-day actions unchanged.
+
+### Phase 3 — remaining
+SEC-3/4/5 token hashing + expiry + rotate-on-login + `/auth/logout` — **DEFERRED**: it invalidates all live
+sessions (mass re-login) on the running business, so it needs a coordinated maintenance window. Infra (columns,
+`lib/tokenAuth.ts`) is ready. · SEC-9 migrate Telegram botToken into ConnectedAccount · POL-10/11/16/20 approval
+executors + client Approvals inbox UI.
+
+### Phases 4–6 (not started) — feature build
+Agent Spec + versioning + **Creation Studio** (the north-star), event/trigger/workflow spine + outbound (Trackly
+QR drip), tools + agentic loop, memory/RAG, and the broad client UX layer. Large multi-session work.
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 
