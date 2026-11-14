@@ -39,6 +39,7 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test # QA-51: client unit/component tests (vitest + Testing Library, jsdom)
 
   guards:
     runs-on: ubuntu-latest
