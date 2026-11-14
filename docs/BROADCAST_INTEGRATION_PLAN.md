@@ -1,5 +1,13 @@
 # Broadcast & Outbound Messaging API — Integration Plan
 
+> ⛔ **OUT OF SCOPE (owner decision 2026-11-14).** The official WhatsApp **Cloud API /
+> BROADCAST** path is dropped: `whatsapp-web.js` (QR) is the only agent transport, and
+> outbound is the **Trackly-style QR drip** only (see [architecture/decision-log.md](architecture/decision-log.md)
+> ADR-3 and the SCN module in [architecture/backlog.md](architecture/backlog.md)). This
+> document is retained for reference; **do not implement the Cloud-API surface here**
+> (a CI guard, QA-58, forbids it). The compliant-outbound design ideas may inform a
+> future reversal if the owner adopts the Cloud API.
+
 **Status:** Plan only (no code changes). Activates [BACKLOG.md B21](BACKLOG.md#L292).
 **Goal:** Let external apps (starting with **Trackly**) send promotional WhatsApp messages
 *through* this platform via a standard, reusable API — without importing their leads — and

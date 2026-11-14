@@ -30,11 +30,22 @@ Status keys: ✅ done+tested · 🔨 in progress · ⏸️ blocked (needs owner/
 
 **Verification:** full suite **75 tests green**, `tsc --noEmit` clean (server + client), no regression. 6 commits on `feat/agentic-platform` (main untouched).
 
-### Phase 0 — remaining
-FND-31 res.usage capture → **folded into Phase 2 MGW-1/OBS-3** (gateway structured return; a Phase-0 half-measure
-would be throwaway). · FND-35/36 pin deps + lockfile · FND-47 minimal CI · FND-02/03/04/05 + PXD drift-doc
-reconciliations · FND-50/51 + UX-04 WS-auth/widget UX polish · FND-52/53 finish env/secrets docs + log redaction.
-Then **Phase 1** (migrations) — note DB-2/3/4 need the shadow prod DB (owner).
+| FND-35/36 pin all deps + lockfile · QA-15 guard | ✅ | No `latest` in any manifest; server lockfile synced; CI guard fails on `latest`. |
+| FND-47 / QA-11 CI workflow | ✅ | `.github/workflows/ci.yml`: server typecheck+tests, client typecheck, no-`latest` guard. |
+| PXD-10 decision log + **DB-1** datasource strategy | ✅ | `decision-log.md`: Postgres-everywhere + migrations recommended; blockers flagged. |
+| FND-04 / PXD-14 README reconcile · PXD-23 BROADCAST out-of-scope | ✅ | Root README documents the live SaaS; BROADCAST banner added. |
+
+**Phase 0 code-complete.** Every live security hole closed + double-reply fixed; 8 commits; 75 tests green;
+main untouched. Remaining Phase-0 items are low-risk polish (FND-50/51 UX already largely covered by the WS
+'unauthorized' handling; FND-02/03/05 further doc reconciliation; FND-52/53 finish) — can trail Phase 1.
+FND-31 token capture folded into Phase 2 (MGW-1/OBS-3).
+
+### Phase 1 — BLOCKED on owner decision/resource (see decision-log.md DB-1)
+Migrations require: (1) a **Postgres instance for dev/test** (cutting the schema to `postgresql` breaks the
+SQLite test suite until one exists — docker-compose defines one); (2) a **structural shadow clone of the live
+prod DB** to diff the baseline against, or approval to generate the baseline and `migrate resolve` it on prod
+in a deploy window (DB-2/3/4). No prod change made. **Next once unblocked:** DB-1→DB-5 migration baseline,
+then DB-7..10 orgId backfills (rehearsed per DB-24).
 
 ## Tasks needing owner / external resources (parked, surfaced early)
 

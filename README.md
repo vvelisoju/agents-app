@@ -1,102 +1,78 @@
-# Personal Agents
+# Personal Agent Platform
 
-A small, private hub for your own automation agents. Each agent lives in its own
-folder under `agents/` and shares one "brain" (Claude) from `shared/`.
+A multi-tenant web app where anyone can create their own AI agents — no technical
+knowledge needed. Describe your business (or paste a link), and the agent replies to
+your customers on **WhatsApp**, a **website chat widget**, or **Telegram**. Training is
+instant (edit anytime, applies to the next message), and you choose whether replies send
+automatically or wait for your approval.
 
-The first agent is a **WhatsApp reply assistant**: when a customer messages your
-WhatsApp, Claude drafts a reply and you approve it before it sends.
+> **This is the product.** The original single-tenant CLI prototype and the earlier
+> single-file skeleton now live under [`legacy/`](legacy/) for reference only.
+
+## Layout
 
 ```
 PersonalAgents/
-├─ shared/
-│   └─ claude.js            ← the shared "brain" (talks to Claude)
-├─ agents/
-│   ├─ whatsapp-reply/      ← Agent #1: WhatsApp auto-reply
-│   │   ├─ index.js         ← the agent (you rarely edit this)
-│   │   ├─ config.js        ← YOUR settings + persona (edit this)
-│   │   └─ README.md        ← how this agent works
-│   └─ _template/           ← copy this to create new agents
-├─ .env                     ← your secret API key (you create this; never shared)
-└─ package.json
+├─ server/     Node + TypeScript API (Express + Prisma + WebSocket) — agents, training, channels
+├─ client/     React + Vite web app (PWA / Capacitor-ready) — the invisible-UI dashboard
+├─ docs/       Specs. Start at docs/architecture/ (current state, target, roadmap, backlog)
+└─ legacy/     Archived prototype (agents/) + skeleton (platform/) — not the product
 ```
 
----
+## Quick start (dev)
 
-## One-time setup (about 5 minutes)
-
-Open a terminal **in this folder** and run:
-
-**1. Install the libraries**
+**Server** (API on :4001)
 ```bash
+cd server
+cp .env.example .env            # add ANTHROPIC_API_KEY; the rest have dev defaults
 npm install
+npm run dev
 ```
-> The first install also downloads a small Chromium browser (used behind the
-> scenes for WhatsApp Web). It can take a few minutes — that's normal.
 
-**2. Add your Claude API key**
-- Get a key from https://console.anthropic.com/
-- Copy `.env.example` to `.env` and paste your key:
+**Client** (web app on :5173)
 ```bash
-cp .env.example .env     # (Git Bash)   —   or:  copy .env.example .env  (CMD)
+cd client
+npm install
+npm run dev
 ```
-Then open `.env` and set `ANTHROPIC_API_KEY=sk-ant-...`
 
-**3. Tell the agent about your business**
-- Open `agents/whatsapp-reply/config.js` and edit the `systemPrompt` (your products,
-  tone, and rules). This is the most important step — better instructions = better replies.
+The web app proxies `/api` and `/ws` to the server. Sign up with a phone number
+(the dev OTP is returned in the API response when WhatsApp OTP isn't configured),
+add an agent, connect its channel (scan the WhatsApp QR / paste the website snippet /
+add a Telegram bot token), train it, and test it in the console before going live.
 
----
-
-## Run the WhatsApp agent
+## Tests
 
 ```bash
-npm run whatsapp
+cd server && npm test     # isolated SQLite DB; never touches a real/prod database (QA-01)
 ```
 
-- The **first time**, a QR code appears in the terminal. On your phone open
-  **WhatsApp → Settings → Linked Devices → Link a device**, and scan it.
-- After that it stays logged in — no QR needed next time.
-- When a customer messages you, the agent shows a suggested reply and asks
-  **`Send this? [y / e / n]`**. Press `y` to send, `e` to edit, `n` to skip.
-- Press **Ctrl + C** to stop the agent.
+## Deploying
 
-Full details: [agents/whatsapp-reply/README.md](agents/whatsapp-reply/README.md)
+See [DEPLOY.md](DEPLOY.md). The server runs as one container (Railway) with a Postgres
+database; the client deploys to Vercel (or is served by nginx in the full `docker-compose`).
 
-### If you see `Could not find Chrome`
+## Architecture & roadmap
 
-WhatsApp Web runs inside a Chrome browser that npm downloads for you. If that
-download was interrupted (antivirus, a dropped connection), fetch it manually:
-```bash
-npm run setup-browser      # = npx puppeteer browsers install chrome
-```
-`npm install` also runs this automatically now (see the `postinstall` script).
+The design and the task-level plan live in [`docs/architecture/`](docs/architecture/):
+[current-state](docs/architecture/current-state.md) ·
+[target-architecture](docs/architecture/target-architecture.md) ·
+[implementation-roadmap](docs/architecture/implementation-roadmap.md) ·
+[backlog](docs/architecture/backlog.md) ·
+[decision-log](docs/architecture/decision-log.md) ·
+[execution-log](docs/architecture/EXECUTION_LOG.md).
 
----
+## Safety & compliance
 
-## Important — please read
+- **Reply-only on WhatsApp.** The agent responds to people who message you; it never
+  mass-blasts. Bulk/cold promotional sending is the top cause of WhatsApp bans.
+- WhatsApp connects via QR (`whatsapp-web.js`), an unofficial method. Risk is low for
+  genuine replies within the 24-hour window; outbound campaigns are an explicit,
+  accepted-risk, throttled feature on a secondary number.
+- Per-agent **approve-before-send** and a `NEEDS_HUMAN` escalation path keep sensitive
+  messages from being auto-answered. Secrets are encrypted at rest.
 
-- **Keep the computer on.** This runs on *your* machine. When the computer is off
-  or asleep, the agent isn't watching WhatsApp. (Later you can move it to a small
-  always-on PC or a cheap cloud server.)
-- **Start in approve-before-send mode** (`autoSend: false`, the default). Watch the
-  replies for a few days before you ever consider turning on auto-send.
-- **Reply to people who message you — don't mass-blast.** Sending the same
-  promotional message to lots of people is the #1 reason WhatsApp bans business
-  numbers. This tool is built for *responding*, which is safe. Keep it that way.
-- **This uses an unofficial method** (automating WhatsApp Web), which is against
-  WhatsApp's terms. The risk is low when you only reply to real conversations, but
-  it is not zero. For heavy/official use, the WhatsApp Business Cloud API is the
-  sanctioned route — ask and I'll help you move to it.
-- Your `.env` and WhatsApp session (`.wwebjs_auth/`) are **private** and are never
-  committed to git (see `.gitignore`).
+## The old CLI prototype
 
----
-
-## Add a new agent
-
-1. Copy the `agents/_template/` folder to `agents/<your-agent-name>/`.
-2. Edit its `config.js` and `index.js`.
-3. Add a script to `package.json`, e.g. `"myagent": "node agents/my-agent/index.js"`.
-4. Run it with `npm run myagent`.
-
-See [agents/_template/README.md](agents/_template/README.md).
+Still runnable for reference: `npm run whatsapp` (now at
+[`legacy/agents/whatsapp-reply/`](legacy/agents/whatsapp-reply/)).
