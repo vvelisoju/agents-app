@@ -4,6 +4,7 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, MessageMedia } = pkg as any;
 import qrcode from 'qrcode';
 import path from 'path';
+import fs from 'fs';
 import prisma from '../lib/prisma';
 import * as realtime from '../lib/realtime';
 import { register } from './registry';
@@ -25,8 +26,22 @@ async function setStatus(agentId: string, status: string) {
   }).catch(() => {});
 }
 
+// On an ephemeral/restarting host, a crashed Chromium leaves a SingletonLock in the agent's
+// profile (on the persistent volume). The next launch then sees "profile in use by another
+// Chromium process" and tries to relay via X11 → "Can't open display" → the browser fails to
+// launch (Code 21). Clearing these stale lock files before launch makes restarts self-healing.
+function clearProfileLock(agentId: string) {
+  try {
+    const dir = path.join(AUTH_DIR, `session-${agentId}`);
+    for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      try { fs.rmSync(path.join(dir, f), { force: true, recursive: true }); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
+
 export async function startSession(agentId: string) {
   if (clients.has(agentId)) return;
+  clearProfileLock(agentId);
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: agentId, dataPath: AUTH_DIR }),
     authTimeoutMs: 90000,
@@ -69,7 +84,14 @@ export async function startSession(agentId: string) {
     }
   });
 
-  client.initialize();
+  // CRITICAL: never let a Puppeteer/Chromium launch failure become an unhandledRejection (which
+  // would crash the whole server). Catch it, mark the agent, and free the slot so a later retry
+  // or QR re-scan can recover — the rest of the API keeps serving.
+  client.initialize().catch(async (e: any) => {
+    console.error('wa initialize failed for', agentId, '-', e?.message || e);
+    await setStatus(agentId, 'auth_failed').catch(() => {});
+    clients.delete(agentId);
+  });
 }
 
 export async function stopSession(agentId: string) {

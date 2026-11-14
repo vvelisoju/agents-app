@@ -14,6 +14,16 @@ import './lib/retention'; // EWS-33/OBS-18/POL-17: register retention sweeps on 
 import { startMaintenance, stopMaintenance } from './lib/maintenance'; // EWS-34 (always-on, ungated)
 import './tools/builtin'; // TOOL-28: register built-in tools (reply path unaffected until agentic)
 
+// Availability guard: a background failure (e.g. a Puppeteer/WhatsApp launch error, a dropped
+// socket) must never take the whole API down. Log it and keep serving — the reply bot is one
+// feature among many, and a crash loop is a worse outcome than one degraded channel.
+process.on('unhandledRejection', (reason: any) => {
+  console.error('unhandledRejection:', reason?.stack || reason?.message || reason);
+});
+process.on('uncaughtException', (err: any) => {
+  console.error('uncaughtException:', err?.stack || err?.message || err);
+});
+
 assertProdSecrets(); // SEC-17: die loudly in prod if a required secret is missing
 const app = buildApp();
 const server = http.createServer(app);
