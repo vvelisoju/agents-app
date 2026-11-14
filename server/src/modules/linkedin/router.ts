@@ -9,6 +9,7 @@ import { requirePermission } from '../../middleware/authz';
 import { audit } from '../../lib/audit';
 import { saveSession, getSessionStatus, clearSession } from '../../lib/linkedin/session';
 import { createAction, listActions, approveAction, cancelAction } from './service';
+import { createWatch, listWatches, updateWatch, deleteWatch } from './monitorService';
 import prisma from '../../lib/prisma';
 
 const router = Router();
@@ -80,6 +81,37 @@ router.post('/:agentId/actions/:actionId/cancel', editGate, asyncHandler(async (
   } catch (e: any) {
     res.status(e?.status || 400).json({ error: e?.message || 'could not cancel the action' });
   }
+}));
+
+// ── LKD-2: watched people (e.g. your boss) → the monitor drafts a reaction on each new post ──
+router.get('/:agentId/watches', asyncHandler(async (req, res) => {
+  const agentId = String(req.params.agentId);
+  if (!(await assertOwnedAgent(u(req).orgId, agentId))) return res.status(404).json({ error: 'agent not found' });
+  res.json({ watches: await listWatches(u(req).orgId, agentId) });
+}));
+
+router.post('/:agentId/watches', editGate, asyncHandler(async (req, res) => {
+  try {
+    const watch = await createWatch(u(req).orgId, String(req.params.agentId), { profileUrl: req.body?.profileUrl, label: req.body?.label, reaction: req.body?.reaction });
+    audit({ orgId: u(req).orgId, actorUserId: u(req).id, action: 'linkedin.watch_create', targetType: 'linkedin_watch', targetId: watch.id });
+    res.json({ watch });
+  } catch (e: any) {
+    res.status(e?.status || 400).json({ error: e?.message || 'could not add the watch' });
+  }
+}));
+
+router.patch('/:agentId/watches/:watchId', editGate, asyncHandler(async (req, res) => {
+  try {
+    res.json({ watch: await updateWatch(u(req).orgId, String(req.params.watchId), { active: req.body?.active, reaction: req.body?.reaction, label: req.body?.label }) });
+  } catch (e: any) {
+    res.status(e?.status || 400).json({ error: e?.message || 'could not update the watch' });
+  }
+}));
+
+router.delete('/:agentId/watches/:watchId', editGate, asyncHandler(async (req, res) => {
+  const ok = await deleteWatch(u(req).orgId, String(req.params.watchId));
+  if (!ok) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
 }));
 
 export default router;

@@ -11,10 +11,13 @@
 require('dotenv').config();
 import { runWorker } from './lib/linkedin/worker';
 import { realDriver } from './lib/linkedin/driver';
+import { draftReaction } from './lib/linkedin/draft';
 
 process.on('unhandledRejection', (reason: any) => console.error('[linkedin-worker] unhandledRejection:', reason?.message || reason));
 
-runWorker(realDriver).catch((e: any) => {
+// The real driver is both the write-driver (post/comment/reshare) and the reader (fetch latest
+// post); draftReaction calls the model to write the comment/caption in the agent's voice.
+runWorker(realDriver, { reader: realDriver, draft: draftReaction }).catch((e: any) => {
   console.error('[linkedin-worker] fatal:', e?.message || e);
   process.exit(1);
 });

@@ -137,10 +137,18 @@ with the account's normal IP. (Decision 2 below.)
 - **Remaining for Wave 1 to go live:** (a) selector tuning on the owner's machine with a real cookie;
   (b) owner runs the worker process; (c) a Studio UI (Wave 4) — until then, drive it via the API.
 
-**Wave 2 — monitor people → draft reaction**
-- `linkedin-monitor` workflow handler (mirror `scheduledMonitor`): per `LinkedInWatch`, read latest
-  activity, detect new post, draft comment/reshare via the agentic model, `awaitApproval`, then execute.
-- Watch CRUD (list people to monitor) + cron trigger wiring. Tests on new-post detection + draft+approve.
+**Wave 2 — monitor people → draft reaction ✅ BUILT (test-gated, 2026-11-14)**
+- `LinkedInWatch` model (both schemas): people to watch + `reaction` (comment|reshare|both) + baseline
+  `lastPostId`. `modules/linkedin/monitorService.ts` — watch CRUD + `monitorTickOnce(deps)`.
+- `driver.fetchLatestPost` (read the profile's latest activity; separate `LinkedInReader` interface,
+  NEEDS-LIVE-TUNING) + `lib/linkedin/draft.ts` (`draftReaction` reuses `composeSystemPrompt`+`askClaude`
+  so the comment/caption is in the agent's trained voice — injected, so tests never call the model).
+- Flow: first sighting = baseline (no draft); a genuinely new post → drafts a comment and/or reshare
+  as **pending_approval** `LinkedInAction`s (owner still approves). A dead session flips to needs_relink.
+- Folded into the worker loop: approved actions take priority; idle cycles poll the most-stale watch.
+- Routes: `/api/linkedin/:agentId/watches` (CRUD). Tests: `tests/linkedinMonitor.test.ts` (11) —
+  baseline/new/unchanged/both/session-fail + watch CRUD + tenancy. Full suite 322/322 green.
+- **To go live:** same as Wave 1 (tune `fetchLatestPost`/reaction selectors on the owner's machine).
 
 **Wave 3 — job search (read-only digest)**
 - `searchJobs(criteria)` driver → extract listings → saved digest + optional WhatsApp summary. No apply.

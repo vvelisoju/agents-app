@@ -25,12 +25,20 @@ export class SessionError extends Error {
 
 export interface ActionResult { url?: string }
 
-// The contract the worker depends on. The real implementation (realDriver) drives Puppeteer; tests
-// inject a mock so the action/approval/worker logic is verified without launching Chrome.
+// The WRITE contract the action worker depends on. The real implementation (realDriver) drives
+// Puppeteer; tests inject a mock so the action/approval/worker logic is verified without Chrome.
 export interface LinkedInDriver {
   publishPost(orgId: string, agentId: string, text: string): Promise<ActionResult>;
   commentOnPost(orgId: string, agentId: string, postUrl: string, text: string): Promise<ActionResult>;
   resharePost(orgId: string, agentId: string, postUrl: string, caption?: string): Promise<ActionResult>;
+}
+
+export interface LatestPost { postId: string; postUrl: string; text: string }
+
+// LKD-2: the READ contract the monitor depends on (kept separate from the write driver so the
+// monitor can be tested with a stub reader and the write-driver mocks stay unchanged).
+export interface LinkedInReader {
+  fetchLatestPost(orgId: string, agentId: string, profileUrl: string): Promise<LatestPost | null>;
 }
 
 // ── Everything LinkedIn-DOM-specific lives here. Tune these on the owner's machine. ──
@@ -48,6 +56,8 @@ const SELECTORS = {
   // Reshare flow.
   reshareButton: 'button[aria-label^="Repost"], button[aria-label^="Share"]',
   reshareWithThoughts: 'div[aria-label="Repost with your thoughts"], button:has-text("Repost with your thoughts")',
+  // LKD-2 — a single activity/update card on a profile's recent-activity page.
+  feedUpdate: 'div.feed-shared-update-v2[data-urn], div[data-urn^="urn:li:activity"]',
 };
 
 const NAV_TIMEOUT_MS = Number(process.env.LINKEDIN_NAV_TIMEOUT_MS) || 45_000;
@@ -102,7 +112,29 @@ async function typeHuman(page: any, selector: string, text: string): Promise<voi
   await sleep(rand(500, 1200));
 }
 
-export const realDriver: LinkedInDriver = {
+export const realDriver: LinkedInDriver & LinkedInReader = {
+  // ── LKD-2 · NEEDS LIVE TUNING: read the person's most recent activity post. ──
+  async fetchLatestPost(orgId, agentId, profileUrl) {
+    const url = profileUrl.replace(/\/$/, '') + '/recent-activity/all/';
+    return withPage(orgId, agentId, async (page) => {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await assertAuthed(page);
+      await page.waitForSelector(SELECTORS.feedUpdate).catch(() => {});
+      // Read the first activity card: its data-urn (stable post id), permalink, and text.
+      const post = await page.evaluate((sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (!el) return null;
+        const urn = el.getAttribute('data-urn') || el.querySelector('[data-urn]')?.getAttribute('data-urn') || '';
+        const textEl = el.querySelector('.update-components-text, .feed-shared-update-v2__description');
+        const text = (textEl?.textContent || '').trim();
+        return { urn, text };
+      }, SELECTORS.feedUpdate);
+      if (!post || !post.urn) return null;
+      const postUrl = `https://www.linkedin.com/feed/update/${post.urn}/`;
+      return { postId: post.urn, postUrl, text: post.text };
+    });
+  },
+
   // ── NEEDS LIVE TUNING against the real logged-in feed. ──
   async publishPost(orgId, agentId, text) {
     return withPage(orgId, agentId, async (page) => {

@@ -308,6 +308,24 @@ model LinkedInAction {
   @@index([status])
 }
 
+// LKD-2: people whose LinkedIn posts the agent watches. On a NEW post it drafts a comment and/or
+// reshare (via the model), which land as pending_approval LinkedInActions — the owner still approves.
+model LinkedInWatch {
+  id            String    @id @default(uuid())
+  orgId         String
+  agentId       String
+  profileUrl    String
+  label         String?
+  reaction      String    @default("comment") // comment | reshare | both
+  active        Boolean   @default(true)
+  lastPostId    String? // last seen post id; null until the first sighting (baseline, no draft)
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+}
+
 // ─── Phase 5: Event / Trigger / Workflow spine (all gated behind WORKFLOW_ENABLED) ───
 
 // EWS-01 — transactional outbox (CloudEvents field-shape). NOT a broker: a dispatcher
