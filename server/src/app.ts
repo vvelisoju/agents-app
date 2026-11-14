@@ -7,6 +7,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { registerRoutes } from './routes';
+import { idempotency } from './middleware/idempotency';
 import { razorpayWebhook } from './modules/webhooks/razorpay';
 import './channels/website';  // register the website adapter
 import './channels/telegram'; // register the telegram adapter
@@ -33,6 +34,8 @@ export function buildApp() {
   const authMax = process.env.NODE_ENV === 'test' ? 1000 : 20;
   app.use('/api/auth', rateLimit({ windowMs: 60_000, max: authMax, standardHeaders: true, legacyHeaders: false }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
+  // PXD-34: safe-retry support — only active when a request carries an Idempotency-Key header.
+  app.use('/api', idempotency);
 
   registerRoutes(app);
 
