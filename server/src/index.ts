@@ -10,6 +10,7 @@ import './channels/whatsapp'; // register the WhatsApp adapter
 import * as wa from './channels/whatsapp';
 import { startSpine, stopSpine } from './jobs/spine'; // EWS-14: Phase-5 spine (gated by WORKFLOW_ENABLED)
 import './workflow/handlers'; // register built-in workflow handlers (scheduled-monitor, …)
+import './tools/builtin'; // TOOL-28: register built-in tools (reply path unaffected until agentic)
 
 assertProdSecrets(); // SEC-17: die loudly in prod if a required secret is missing
 const app = buildApp();
