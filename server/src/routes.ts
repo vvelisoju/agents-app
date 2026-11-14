@@ -36,9 +36,10 @@ export function registerRoutes(app: Express) {
   ));
   // Server-authoritative feature flags so the UI only surfaces a scenario when its handler
   // is actually enabled (no dead-end controls). SCN-36 scenario flags + the spine flag.
-  app.get('/api/config', authMiddleware, (_req, res) =>
-    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled() } }),
-  );
+  app.get('/api/config', authMiddleware, async (_req, res) => {
+    const { embeddingsConfigured } = await import('./lib/embeddings');
+    res.json({ features: { workflow: workflowEnabled(), monitor: monitorEnabled(), outbound: outboundEnabled(), memory: memoryEnabled(), rag: embeddingsConfigured() } });
+  });
 
   // SEC — connected integration credentials (masked; never returns a secret). Owner can revoke.
   app.get('/api/connected-accounts', authMiddleware, asyncHandler(async (req, res) => {

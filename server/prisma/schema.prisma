@@ -395,6 +395,24 @@ model ContactMemory {
   @@index([agentId, contactNumber])
 }
 
+// MK-16/17 — a chunk of a document/page's full text for retrieval (RAG). `embeddingJson` holds
+// the vector (JSON float array) when an embeddings provider is configured; null → keyword-only.
+// Cosine similarity is computed in-process, so no pgvector extension is required (fine for the
+// small per-tenant KBs in scope; swap to pgvector if a KB ever outgrows that).
+model KnowledgeChunk {
+  id            String   @id @default(uuid())
+  orgId         String
+  agentId       String
+  sourceLabel   String // e.g. the PDF filename or URL
+  idx           Int      @default(0)
+  content       String
+  embeddingJson String? // JSON number[]; null until embedded
+  createdAt     DateTime @default(now())
+
+  @@index([agentId])
+  @@index([orgId])
+}
+
 // SCN-27 — a scheduled website/offer/price monitor. The scheduled-monitor handler fetches
 // `url` (SSRF-guarded), extracts readable text, hashes it, and notifies on change. One Watch
 // owns one cron Trigger on the spine (triggerId) created/removed with it.

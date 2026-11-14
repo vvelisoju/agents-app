@@ -1,5 +1,14 @@
 # Operations Runbook
 
+> **RAG / embeddings (pluggable, off by default).** Document search (`knowledge.search`) works today
+> with keyword retrieval and **needs no config**. To switch on vector search, set two env vars on the
+> server: `EMBEDDINGS_PROVIDER` = `voyage` | `openai` | `cohere`, and the matching key
+> (`VOYAGE_API_KEY` / `OPENAI_API_KEY` / `COHERE_API_KEY`). Optional `EMBEDDINGS_MODEL` overrides the
+> default model. New document uploads embed automatically; to embed documents uploaded *before* the
+> key was set, call `POST /api/agents/:id/knowledge/reindex` per agent. `GET /api/config` reports
+> `features.rag`, and `GET /api/agents/:id/knowledge` reports chunk/embedded counts + the provider.
+
+
 Operational reference for running the Secure Agents server (`server/`, Node + TypeScript + Express + Prisma) in production. Covers the workflow-spine feature flags and exactly what each turns on, the safe enable sequence, how migrations are applied against prod, health/readiness probes, and graceful-shutdown behavior on redeploy.
 
 > **Golden rule:** With all three feature flags unset (the default), the process behaves **byte-for-byte as today** — the inbound reply path is unchanged and no background work runs. Everything new is gated off by default.

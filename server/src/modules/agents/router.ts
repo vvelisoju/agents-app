@@ -454,12 +454,28 @@ scoped.post('/training/learn-document', rawBody({ type: ['application/pdf', 'app
   try {
     const { extractPdfText } = await import('../../lib/pdf');
     const { learnFromText } = await import('../../lib/learn');
+    const { ingestChunks } = await import('../../lib/knowledge');
     const filename = String(req.query.filename || 'document.pdf').slice(0, 120);
     const { text, title } = await extractPdfText(buf);
-    res.json(await learnFromText(agent(req).name, text, filename, title));
+    const result = await learnFromText(agent(req).name, text, filename, title);
+    // RAG: store the document's full text as searchable chunks (vector if a provider is set).
+    const indexed = await ingestChunks(agent(req).orgId, agent(req).id, filename, text).catch(() => ({ chunks: 0, embedded: 0 }));
+    res.json({ ...result, indexed });
   } catch (e: any) {
     res.status(422).json({ error: e?.message || 'Could not read that PDF.' });
   }
+}));
+
+// MK — knowledge index status (chunk + embedded counts, provider) and a re-embed trigger.
+scoped.get('/knowledge', asyncHandler(async (req, res) => {
+  const { knowledgeStatus } = await import('../../lib/knowledge');
+  const { embeddingsStatus } = await import('../../lib/embeddings');
+  res.json({ ...(await knowledgeStatus(agent(req).id)), embeddings: embeddingsStatus() });
+}));
+
+scoped.post('/knowledge/reindex', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { reindexAgent } = await import('../../lib/knowledge');
+  res.json(await reindexAgent(agent(req).id));
 }));
 
 scoped.post('/training/sources', validate(sourceSchema), asyncHandler(async (req, res) => {
