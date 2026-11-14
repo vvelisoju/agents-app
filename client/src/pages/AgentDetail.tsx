@@ -14,6 +14,7 @@ import { ChatsPanel } from '@/components/agent/ChatsPanel';
 import { VersionsPanel } from '@/components/agent/VersionsPanel';
 import { MonitorsPanel } from '@/components/agent/MonitorsPanel';
 import { CampaignsPanel } from '@/components/agent/CampaignsPanel';
+import { AbilitiesPanel } from '@/components/agent/AbilitiesPanel';
 import { AvailabilityCard } from '@/components/agent/AvailabilityCard';
 import { ConnectCard } from '@/components/agent/ConnectCard';
 import { AlertSettingsCard } from '@/components/agent/AlertSettingsCard';
@@ -108,6 +109,7 @@ export function AgentDetail({ id }: { id: string }) {
           <Tabs
             tabs={[
               { id: 'train', label: 'Train' },
+              { id: 'abilities', label: 'Abilities' },
               { id: 'test', label: 'Test' },
               { id: 'chats', label: 'Chats' },
               ...(config?.features?.monitor ? [{ id: 'monitors', label: 'Monitors' }] : []),
@@ -118,6 +120,7 @@ export function AgentDetail({ id }: { id: string }) {
             onChange={setTab}
           />
           {tab === 'train' && <TrainingPanel id={id} />}
+          {tab === 'abilities' && <AbilitiesPanel id={id} />}
           {tab === 'test' && <TestPanel id={id} />}
           {tab === 'chats' && <ChatsPanel id={id} />}
           {tab === 'monitors' && config?.features?.monitor && <MonitorsPanel id={id} />}
