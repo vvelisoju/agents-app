@@ -12,6 +12,7 @@ import { validate } from '../../middleware/validate';
 import { createAgentSchema, sourceSchema } from '../../lib/schemas';
 import { normalizePhone, toWhatsappDigits } from '../../lib/phone';
 import { widgetKey } from '../../lib/widgetKey';
+import { encryptSecret, isEncrypted } from '../../lib/crypto';
 
 const router = Router();
 
@@ -63,7 +64,15 @@ scoped.patch('/', asyncHandler(async (req, res) => {
   if (req.body?.hoursStart === null || typeof req.body?.hoursStart === 'number') data.hoursStart = req.body.hoursStart;
   if (req.body?.hoursEnd === null || typeof req.body?.hoursEnd === 'number') data.hoursEnd = req.body.hoursEnd;
   if (typeof req.body?.timezone === 'string') data.timezone = req.body.timezone;
-  if (req.body?.channelConfig && typeof req.body.channelConfig === 'object') data.channelConfig = JSON.stringify(req.body.channelConfig);
+  if (req.body?.channelConfig && typeof req.body.channelConfig === 'object') {
+    // SEC-2: encrypt channel secrets at rest (Telegram botToken) rather than storing
+    // them as plaintext JSON. Decrypted only at send time (channels/telegram.ts).
+    const cc: Record<string, any> = { ...req.body.channelConfig };
+    if (typeof cc.botToken === 'string' && cc.botToken && !isEncrypted(cc.botToken)) {
+      cc.botToken = encryptSecret(cc.botToken);
+    }
+    data.channelConfig = JSON.stringify(cc);
+  }
   // Owner-alert number (null/empty clears). Validate as an Indian mobile.
   if (req.body?.alertNumber === null || req.body?.alertNumber === '') data.alertNumber = null;
   else if (typeof req.body?.alertNumber === 'string') {

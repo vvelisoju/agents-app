@@ -5,9 +5,11 @@ import http from 'http';
 import prisma from './lib/prisma';
 import { buildApp } from './app';
 import { attachWs } from './lib/realtime';
+import { assertProdSecrets } from './lib/env';
 import './channels/whatsapp'; // register the WhatsApp adapter
 import * as wa from './channels/whatsapp';
 
+assertProdSecrets(); // SEC-17: die loudly in prod if a required secret is missing
 const app = buildApp();
 const server = http.createServer(app);
 attachWs(server);
