@@ -3,9 +3,19 @@
 import { Router } from 'express';
 import prisma from '../../lib/prisma';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { canSpend } from '../../lib/budget';
 
 const router = Router();
 const org = (req: any) => req.user.orgId;
+
+// MGW-15 — today's reply usage vs the plan's daily cap, for the client usage meter.
+// Any member may read it (drives an always-visible meter + near-cap nudge, MGW-16).
+router.get('/usage', asyncHandler(async (req, res) => {
+  const { used, cap, allowed } = await canSpend(org(req));
+  const remaining = Math.max(0, cap - used);
+  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  res.json({ used, cap, remaining, pct, allowed, nearCap: pct >= 80 });
+}));
 
 router.get('/', asyncHandler(async (req, res) => {
   const orgId = org(req);

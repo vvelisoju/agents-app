@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { requirePermission } from '../../middleware/authz';
-import { listRuns, getRun, controlRun, spineMetrics, type ControlAction } from './service';
+import { listRuns, getRun, controlRun, spineMetrics, listDeadJobs, replayDeadJob, type ControlAction } from './service';
 
 const router = Router();
 const u = (req: any) => req.user;
@@ -21,6 +21,17 @@ router.get('/', asyncHandler(async (req, res) => {
 // GET /api/workflows/metrics — spine queue/DLQ/run metrics (must precede /:runId).
 router.get('/metrics', asyncHandler(async (req, res) => {
   res.json(await spineMetrics(u(req).orgId));
+}));
+
+// EWS-21 — dead-letter queue (must precede /:runId). List dead jobs; replay one back to pending.
+router.get('/dlq', asyncHandler(async (req, res) => {
+  res.json({ jobs: await listDeadJobs(u(req).orgId, req.query.limit ? Number(req.query.limit) : undefined) });
+}));
+
+router.post('/dlq/:jobId/replay', requirePermission('approve'), asyncHandler(async (req, res) => {
+  const r = await replayDeadJob(u(req).orgId, String(req.params.jobId), u(req).id);
+  if (!r.ok) return res.status(404).json({ error: r.reason });
+  res.json({ ok: true, job: r.job });
 }));
 
 // GET /api/workflows/:runId — run + ordered step timeline (cross-tenant → 404).

@@ -40,4 +40,23 @@ describe('observability endpoints', () => {
     const denied = await request(app).get('/api/analytics/executions').set(auth(member.token));
     expect(denied.status).toBe(403);
   });
+
+  // MGW-15 — usage/cap meter, readable by any member.
+  it('/api/analytics/usage reports used/cap/remaining for the day', async () => {
+    const org = await createOrg();
+    const owner = await createUser(org.id, 'owner');
+    const member = await createUser(org.id, 'member');
+    const agent = await createAgent(org.id);
+    await prisma.usageEvent.createMany({
+      data: [1, 2, 3].map((n) => ({ orgId: org.id, agentId: agent.id, type: 'reply', executionId: 'u' + n, outcome: 'sent' })),
+    });
+    const r = await request(app).get('/api/analytics/usage').set(auth(member.token)); // member allowed
+    expect(r.status).toBe(200);
+    expect(r.body.used).toBe(3);
+    expect(r.body.cap).toBeGreaterThan(0);
+    expect(r.body.remaining).toBe(r.body.cap - 3);
+    expect(r.body.allowed).toBe(true);
+    expect(typeof r.body.nearCap).toBe('boolean');
+    expect(owner.token).toBeTruthy();
+  });
 });

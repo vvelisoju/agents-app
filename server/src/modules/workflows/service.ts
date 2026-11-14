@@ -43,6 +43,28 @@ export async function spineMetrics(orgId: string) {
   };
 }
 
+// EWS-21 — dead-letter queue. List dead jobs (org-scoped, newest first) and replay one:
+// requeue it as pending with a fresh attempt budget so the runner picks it up again. The
+// parked WorkflowRun (if any) is flipped back to 'running' so its timeline resumes. Replay
+// is auditable and 404s a job that isn't this org's or isn't actually dead.
+export function listDeadJobs(orgId: string, limit = 100) {
+  return prisma.job.findMany({ where: { orgId, status: 'dead' }, orderBy: { updatedAt: 'desc' }, take: Math.min(500, limit) });
+}
+
+export async function replayDeadJob(orgId: string, jobId: string, userId?: string): Promise<{ ok: boolean; reason?: 'not_found'; job?: any }> {
+  const job = await prisma.job.findFirst({ where: { id: jobId, orgId, status: 'dead' } });
+  if (!job) return { ok: false, reason: 'not_found' };
+  const requeued = await prisma.job.update({
+    where: { id: job.id },
+    data: { status: 'pending', attempts: 0, nextRunAt: new Date(), lease: null, leaseUntil: null, lastError: null },
+  });
+  if (job.workflowRunId) {
+    await prisma.workflowRun.update({ where: { id: job.workflowRunId }, data: { status: 'running', finishedAt: null } }).catch(() => {});
+  }
+  audit({ orgId, actorUserId: userId, action: 'job.replay', targetType: 'job', targetId: job.id, metadata: { handler: job.handlerName } });
+  return { ok: true, job: requeued };
+}
+
 export function listRuns(orgId: string, opts: { agentId?: string; status?: string; limit?: number } = {}) {
   return prisma.workflowRun.findMany({
     where: { orgId, ...(opts.agentId ? { agentId: opts.agentId } : {}), ...(opts.status ? { status: opts.status } : {}) },

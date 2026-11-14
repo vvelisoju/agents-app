@@ -85,4 +85,29 @@ describe('Workflow runs API', () => {
     expect((await request(app).post(`/api/workflows/${run.id}/frobnicate`).set(auth(token))).status).toBe(400);
     expect((await request(app).post('/api/workflows/does-not-exist/pause').set(auth(token))).status).toBe(404);
   });
+
+  // EWS-21 — dead-letter queue: list dead jobs and replay one back to pending.
+  it('lists dead jobs and replays one back to pending (resuming its run)', async () => {
+    const run = await prisma.workflowRun.create({ data: { orgId, workflowName: 'w.dead', status: 'failed', finishedAt: new Date() } });
+    const job = await prisma.job.create({ data: { orgId, workflowRunId: run.id, handlerName: 'noop', status: 'dead', attempts: 5, lastError: 'boom' } });
+    const other = await createOrg();
+    await prisma.job.create({ data: { orgId: other.id, handlerName: 'noop', status: 'dead' } });
+
+    const list = await request(app).get('/api/workflows/dlq').set(auth(token));
+    expect(list.status).toBe(200);
+    expect(list.body.jobs.map((j: any) => j.id)).toEqual([job.id]); // org-scoped
+
+    const replay = await request(app).post(`/api/workflows/dlq/${job.id}/replay`).set(auth(token));
+    expect(replay.status).toBe(200);
+    expect(replay.body.job.status).toBe('pending');
+    expect(replay.body.job.attempts).toBe(0);
+
+    const refreshed = await prisma.job.findUnique({ where: { id: job.id } });
+    expect(refreshed?.status).toBe('pending');
+    expect(refreshed?.lastError).toBeNull();
+    expect((await prisma.workflowRun.findUnique({ where: { id: run.id } }))?.status).toBe('running');
+
+    // Replaying a now-pending (not dead) job → 404.
+    expect((await request(app).post(`/api/workflows/dlq/${job.id}/replay`).set(auth(token))).status).toBe(404);
+  });
 });
