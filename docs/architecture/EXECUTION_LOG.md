@@ -102,10 +102,38 @@ executors + client Approvals inbox UI.
 
 **133 tests green, tsc clean. 22 commits. 5 migrations safely applied to Railway prod.**
 
-### Phase 4 — remaining (mostly CLIENT UX)
-STU-20..42 the Creation Studio **UI** (describe-in-words screen, draft review, capability/trigger/channel/approval
-pickers, simulate step, guided wizard, gallery, version-history/rollback UI, clone) — the big client-UX build.
-STU-24 templates→spec presets · STU-6 collapse NL pipeline stages.
+### Phase 4 — Creation Studio UI (CLIENT core DONE)
+| Task | Status | Notes |
+|---|---|---|
+| STU-20..23 describe-in-words creation + review | ✅ | `client/.../agent/CreateAgent.tsx`: one textarea + example chips + registry-driven channel chips → POST /build → editable review (name/instructions/knowledge/warnings) → create + apply-spec. "Skip — set it up myself" blank-agent escape hatch. Wired into `pages/Agents.tsx` (replaced the channel-first picker). |
+| STU (simulate) | ✅ | Existing **Test** tab already does describe→simulate ("Ask your agent anything", nothing sent). |
+| STU-36..40 version history UI | ✅ | `client/.../agent/VersionsPanel.tsx` + Versions tab in `AgentDetail`: save snapshot (note), confirmed one-tap restore (invalidates agent+training caches), duplicate agent. Wires GET/POST /versions, /rollback, /clone. |
+
+**Client tsc clean.** 2 commits.
+
+### Phase 4 — remaining
+STU-24 templates→spec presets · STU-29/31 capability/trigger pickers (ship as 'soon' until Phase 5/6 wiring,
+STU-30/32 flip) · STU-6 collapse NL pipeline stages · STU-27..35 richer draft-edit surfaces.
+
+### Phase 5 — Event/Trigger/Workflow spine (CORE DONE, migration on prod)
+| Task | Status | Notes |
+|---|---|---|
+| EWS-01..04 spine tables | ✅ | DomainEvent, Trigger, Job, WorkflowRun, WorkflowStepLog — migration `20261114150000_workflow_spine` **applied to Railway prod** (additive, 5 new tables, zero change to existing). |
+| EWS-05/06 envelope + emit outbox | ✅ | `events/envelope.ts` (CloudEvents field-shape, pure makeEvent) + `events/emit.ts` (fire-and-forget, **no-op when WORKFLOW_ENABLED off** → hot path untouched + outbox never grows). |
+| EWS-07/08 types + registry | ✅ | `workflow/types.ts` (StepResult union + StepContext + Step ctors) + `workflow/registry.ts` (self-registering, unknown→undefined→dead-letter). |
+| EWS-09 dispatcher | ✅ | `triggers/dispatcher.ts`: outbox drain + event→trigger match, exactly-once via derived idempotencyKey, shallow filter, tenant-isolated. |
+| EWS-10/11/21 runner + dialect claim + reclaim | ✅ | `jobs/claim.ts` (FOR UPDATE SKIP LOCKED on PG / serialized txn on SQLite; crashed-lease reclaim) + `jobs/runner.ts` (claim/dispatch/apply-StepResult, exp backoff, DLQ at maxAttempts, StepLog history). |
+| EWS-12/23 run stepping + approval gate | ✅ | sleep/retry/complete/awaitApproval/fail transitions; awaitApproval creates an Approval row + parks the run. |
+| EWS-13 scheduler + cron | ✅ | `jobs/cron.ts` (dependency-free 5-field evaluator) + `jobs/scheduler.ts` (minute-bucketed ticker, no dup across overlapping ticks). |
+| EWS-14 boot wiring | ✅ | `jobs/spine.ts` + `index.ts`: start only when WORKFLOW_ENABLED, double-start guard, SIGTERM lease release. |
+| EWS-15/28 tests | ✅ | `tests/spine.test.ts` — 24 tests. **157 total green, tsc clean, no regression.** |
+
+### Phase 5 — remaining
+EWS-16/17 confirm/extend raw-body Razorpay webhook (Phase-0 FND-20/21 may already cover) · EWS-18/19 Runs
+read + control APIs · EWS-22 spine metrics · EWS-24/25/26 Automations page + run detail + 'workflow' WS event ·
+EWS-33/34 retention sweeps + shared maintenance ticker · EWS-30/31 docs + pg-boss decision · EWS-32 inbound
+durability ADR. Then **SCN** handlers (scheduled website monitor, appointment booking, outbound QR drip) that
+register on the spine — the features that make agents *act*.
 
 ### Phases 5–6 (not started) — feature build
 Event/trigger/workflow spine (Postgres SKIP-LOCKED + node-cron) + outbound Trackly QR drip + scheduled monitors +
