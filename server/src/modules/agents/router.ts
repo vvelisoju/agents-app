@@ -510,6 +510,21 @@ scoped.delete('/knowledge/sources', requirePermission('train_edit'), asyncHandle
   res.json(await removeKnowledgeSource(agent(req).id, label));
 }));
 
+// MK-13 — what the agent remembers about a contact (owner visibility), and forgetting one fact.
+scoped.get('/memory', asyncHandler(async (req, res) => {
+  const contact = String(req.query.contact || '');
+  if (!contact) return res.status(400).json({ error: 'contact required' });
+  const { listContactMemory } = await import('../../lib/memory');
+  res.json({ memories: await listContactMemory(agent(req).id, contact) });
+}));
+
+scoped.delete('/memory/:memoryId', requirePermission('train_edit'), asyncHandler(async (req, res) => {
+  const { forgetMemory } = await import('../../lib/memory');
+  const ok = await forgetMemory(agent(req).id, String(req.params.memoryId));
+  if (!ok) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
+}));
+
 scoped.post('/training/sources', validate(sourceSchema), asyncHandler(async (req, res) => {
   const { type, data } = req.body;
   const row = await prisma.trainingSource.create({ data: { agentId: agent(req).id, orgId: agent(req).orgId, type, dataJson: JSON.stringify(data || {}) } });

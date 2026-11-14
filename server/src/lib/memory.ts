@@ -45,6 +45,27 @@ export async function recallMemory(agentId: string, contactNumber: string): Prom
   return rows.map((r) => ({ key: r.key, value: r.value }));
 }
 
+export interface StoredMemory { id: string; key: string; value: string; updatedAt: Date; expiresAt: Date | null }
+
+/** MK-13 — a contact's stored memory for the owner UI (includes ids + timestamps so the owner can
+ *  see and correct what the agent remembers). Non-expired, newest first. */
+export async function listContactMemory(agentId: string, contactNumber: string): Promise<StoredMemory[]> {
+  const now = new Date();
+  const rows = await prisma.contactMemory.findMany({
+    where: { agentId, contactNumber, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+    orderBy: { updatedAt: 'desc' },
+    take: MAX_FACTS_PER_CONTACT,
+  });
+  return rows.map((r) => ({ id: r.id, key: r.key, value: r.value, updatedAt: r.updatedAt, expiresAt: r.expiresAt }));
+}
+
+/** MK-13 — forget one stored memory (owner correction). Scoped to the agent; returns whether a
+ *  row was removed. */
+export async function forgetMemory(agentId: string, memoryId: string): Promise<boolean> {
+  const r = await prisma.contactMemory.deleteMany({ where: { id: memoryId, agentId } });
+  return r.count > 0;
+}
+
 /** Render recalled memory as a compact prompt block (empty string when there is none). */
 export function memoryBlock(memories: ParsedMemory[]): string {
   if (!memories.length) return '';

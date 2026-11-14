@@ -10,8 +10,13 @@ import { processInbound } from '../src/engine/engine';
 import { extractMemory, recallMemory } from '../src/lib/memory';
 import '../src/lib/retention';
 import { runMaintenanceOnce } from '../src/lib/maintenance';
-import { createOrgWithAgent } from './helpers/factories';
+import { createOrgWithAgent, createUser } from './helpers/factories';
 import { sends, resetSends } from './helpers/mockChannel';
+import request from 'supertest';
+import { buildApp } from '../src/app';
+
+const app = buildApp();
+const authH = (t: string) => ({ Authorization: 'Bearer ' + t });
 
 const gen = vi.mocked(generate);
 const reply = (text: string) => ({ text, model: 'm', provider: 'anthropic', inputTokens: 1, outputTokens: 1, latencyMs: 1, stopReason: 'end_turn', refused: false });
@@ -78,6 +83,34 @@ describe('memory in processInbound (MK-9)', () => {
     expect(system).not.toContain('What you already know'); // no recall when off
     // When off, the [[REMEMBER]] token is NOT a memory directive — it just isn't stored.
     expect(await prisma.contactMemory.count({ where: { agentId: agent.id, key: 'x' } })).toBe(0);
+  });
+});
+
+describe('per-contact memory API (MK-13)', () => {
+  it('lists a contact’s memory and forgets one fact', async () => {
+    const { agent, org } = await createOrgWithAgent();
+    const token = (await createUser(org.id, 'owner')).token;
+    const contact = '919000000055@c.us';
+    await prisma.contactMemory.createMany({
+      data: [
+        { orgId: org.id, agentId: agent.id, contactNumber: contact, key: 'likes', value: 'window seat' },
+        { orgId: org.id, agentId: agent.id, contactNumber: contact, key: 'plan', value: 'hot desk' },
+      ],
+    });
+
+    const list = await request(app).get(`/api/agents/${agent.id}/memory?contact=${encodeURIComponent(contact)}`).set(authH(token));
+    expect(list.status).toBe(200);
+    expect(list.body.memories).toHaveLength(2);
+    const target = list.body.memories.find((m: any) => m.key === 'likes');
+    expect(target.id).toBeTruthy();
+
+    const del = await request(app).delete(`/api/agents/${agent.id}/memory/${target.id}`).set(authH(token));
+    expect(del.status).toBe(200);
+    expect(await prisma.contactMemory.count({ where: { agentId: agent.id, contactNumber: contact } })).toBe(1);
+
+    // Forgetting an unknown id → 404; missing contact → 400.
+    expect((await request(app).delete(`/api/agents/${agent.id}/memory/nope`).set(authH(token))).status).toBe(404);
+    expect((await request(app).get(`/api/agents/${agent.id}/memory`).set(authH(token))).status).toBe(400);
   });
 });
 
