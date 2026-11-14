@@ -10,6 +10,7 @@ import { audit } from '../../lib/audit';
 import { saveSession, getSessionStatus, clearSession } from '../../lib/linkedin/session';
 import { createAction, listActions, approveAction, cancelAction } from './service';
 import { createWatch, listWatches, updateWatch, deleteWatch } from './monitorService';
+import { createJobSearch, listJobSearches, getJobSearch } from './jobService';
 import prisma from '../../lib/prisma';
 
 const router = Router();
@@ -112,6 +113,31 @@ router.delete('/:agentId/watches/:watchId', editGate, asyncHandler(async (req, r
   const ok = await deleteWatch(u(req).orgId, String(req.params.watchId));
   if (!ok) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+}));
+
+// ── LKD-3: job searches (read-only). Request a search; the worker runs it and stores a digest. ──
+router.post('/:agentId/jobs', editGate, asyncHandler(async (req, res) => {
+  try {
+    const search = await createJobSearch(u(req).orgId, String(req.params.agentId), { query: req.body?.query, location: req.body?.location });
+    audit({ orgId: u(req).orgId, actorUserId: u(req).id, action: 'linkedin.job_search_create', targetType: 'linkedin_job_search', targetId: search.id });
+    res.json({ search });
+  } catch (e: any) {
+    res.status(e?.status || 400).json({ error: e?.message || 'could not start the job search' });
+  }
+}));
+
+router.get('/:agentId/jobs', asyncHandler(async (req, res) => {
+  const agentId = String(req.params.agentId);
+  if (!(await assertOwnedAgent(u(req).orgId, agentId))) return res.status(404).json({ error: 'agent not found' });
+  res.json({ searches: await listJobSearches(u(req).orgId, agentId) });
+}));
+
+router.get('/:agentId/jobs/:searchId', asyncHandler(async (req, res) => {
+  try {
+    res.json({ search: await getJobSearch(u(req).orgId, String(req.params.searchId)) });
+  } catch (e: any) {
+    res.status(e?.status || 404).json({ error: e?.message || 'not found' });
+  }
 }));
 
 export default router;

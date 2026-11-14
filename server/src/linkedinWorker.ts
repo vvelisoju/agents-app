@@ -15,9 +15,9 @@ import { draftReaction } from './lib/linkedin/draft';
 
 process.on('unhandledRejection', (reason: any) => console.error('[linkedin-worker] unhandledRejection:', reason?.message || reason));
 
-// The real driver is both the write-driver (post/comment/reshare) and the reader (fetch latest
-// post); draftReaction calls the model to write the comment/caption in the agent's voice.
-runWorker(realDriver, { reader: realDriver, draft: draftReaction }).catch((e: any) => {
+// The real driver is the write-driver (post/comment/reshare), the reader (fetch latest post), and
+// the job searcher; draftReaction calls the model to write the comment/caption in the agent's voice.
+runWorker(realDriver, { reader: realDriver, draft: draftReaction }, realDriver).catch((e: any) => {
   console.error('[linkedin-worker] fatal:', e?.message || e);
   process.exit(1);
 });

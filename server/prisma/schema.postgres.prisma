@@ -332,6 +332,25 @@ model LinkedInWatch {
   @@index([agentId])
 }
 
+// LKD-3: owner-initiated job searches (READ-ONLY). The worker runs the search in the logged-in
+// browser and stores a digest of matching listings. No auto-apply. See docs/LINKEDIN_AGENT_PLAN.md.
+model LinkedInJobSearch {
+  id         String    @id @default(uuid())
+  orgId      String
+  agentId    String
+  query      String
+  location   String?
+  status     String    @default("pending") // pending | done | failed
+  resultJson String? // {jobs: [{title, company, location, url}]}
+  error      String?
+  createdAt  DateTime  @default(now())
+  executedAt DateTime?
+
+  @@index([orgId])
+  @@index([agentId])
+  @@index([status])
+}
+
 // ─── Phase 5: Event / Trigger / Workflow spine (all gated behind WORKFLOW_ENABLED) ───
 
 // EWS-01 — transactional outbox (CloudEvents field-shape). NOT a broker: a dispatcher

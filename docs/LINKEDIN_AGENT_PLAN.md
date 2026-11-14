@@ -150,8 +150,13 @@ with the account's normal IP. (Decision 2 below.)
   baseline/new/unchanged/both/session-fail + watch CRUD + tenancy. Full suite 322/322 green.
 - **To go live:** same as Wave 1 (tune `fetchLatestPost`/reaction selectors on the owner's machine).
 
-**Wave 3 — job search (read-only digest)**
-- `searchJobs(criteria)` driver → extract listings → saved digest + optional WhatsApp summary. No apply.
+**Wave 3 — job search (read-only digest) ✅ BUILT (test-gated, 2026-11-14)**
+- `LinkedInJobSearch` model (both schemas) + `modules/linkedin/jobService.ts` (create/list/get +
+  `jobTickOnce`: claim pending → `driver.searchJobs` → store a digest; dead session → needs_relink).
+- `driver.searchJobs` via a separate `LinkedInJobSearcher` interface (NEEDS-LIVE-TUNING, read-only,
+  capped at 25 cards). Folded into the worker loop after actions, before the monitor. **No auto-apply.**
+- Routes: `/api/linkedin/:agentId/jobs` (create/list/get). Tests: `tests/linkedinJobs.test.ts` (10).
+  Full suite 343/343 green.
 
 **Wave 4 — client UI**
 - A LinkedIn section in the Studio: connect (paste session), watched people, pending approvals, post box,

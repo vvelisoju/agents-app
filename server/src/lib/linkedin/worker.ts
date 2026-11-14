@@ -8,7 +8,8 @@
 import { linkedinEnabled } from '../spineEnv';
 import { claimNextApproved, recordResult } from '../../modules/linkedin/service';
 import { monitorTickOnce, type MonitorDeps } from '../../modules/linkedin/monitorService';
-import { SessionError, setSessionStatus, type LinkedInDriver } from './driver';
+import { jobTickOnce } from '../../modules/linkedin/jobService';
+import { SessionError, setSessionStatus, type LinkedInDriver, type LinkedInJobSearcher } from './driver';
 
 export interface TickOutcome { ran: boolean; actionId?: string; ok?: boolean; reason?: string }
 
@@ -50,20 +51,25 @@ const rand = (min: number, max: number) => Math.floor(min + Math.random() * (max
 // actions, a longer idle gap when the queue is empty. Approved actions take priority; when none are
 // pending, an idle cycle is used to poll a watched profile (LKD-2). Both are gated by
 // LINKEDIN_ENABLED. Resilient — a thrown tick never kills the loop.
-export async function runWorker(driver: LinkedInDriver, monitor?: MonitorDeps): Promise<void> {
+export async function runWorker(driver: LinkedInDriver, monitor?: MonitorDeps, jobSearcher?: LinkedInJobSearcher): Promise<void> {
   if (!linkedinEnabled()) {
     console.log('[linkedin-worker] LINKEDIN_ENABLED is not set — worker idle. Set it to 1 to run.');
     return;
   }
-  console.log(`[linkedin-worker] started — executing approved actions${monitor ? ' + watching profiles' : ''}.`);
+  console.log(`[linkedin-worker] started — approved actions${monitor ? ' + watching profiles' : ''}${jobSearcher ? ' + job searches' : ''}.`);
   // eslint-disable-next-line no-constant-condition
   while (true) {
     let outcome: TickOutcome = { ran: false };
     try {
+      // Priority: approved writes first (stay prompt), then a pending job search, then poll one
+      // watch. Only one browser task per cycle so nothing competes for the single session.
       outcome = await tickOnce(driver);
-      // Only poll a watch when there was no action to run, so posting/commenting stays prompt and
-      // the monitor never competes with an approved action for the single browser session.
-      if (!outcome.ran && monitor) await monitorTickOnce(monitor);
+      if (!outcome.ran && jobSearcher) {
+        const job = await jobTickOnce(jobSearcher);
+        if (!job.ran && monitor) await monitorTickOnce(monitor);
+      } else if (!outcome.ran && monitor) {
+        await monitorTickOnce(monitor);
+      }
     } catch (e: any) {
       console.error('[linkedin-worker] tick error:', e?.message || e);
     }

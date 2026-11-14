@@ -41,6 +41,13 @@ export interface LinkedInReader {
   fetchLatestPost(orgId: string, agentId: string, profileUrl: string): Promise<LatestPost | null>;
 }
 
+export interface JobResult { title: string; company: string; location: string; url: string }
+
+// LKD-3: the READ-ONLY job-search contract (separate interface, same reasoning as the reader).
+export interface LinkedInJobSearcher {
+  searchJobs(orgId: string, agentId: string, query: string, location?: string): Promise<JobResult[]>;
+}
+
 // ── Everything LinkedIn-DOM-specific lives here. Tune these on the owner's machine. ──
 const SELECTORS = {
   // When any of these is present after load, we are NOT logged in (cookie dead) or hit a checkpoint.
@@ -58,7 +65,15 @@ const SELECTORS = {
   reshareWithThoughts: 'div[aria-label="Repost with your thoughts"], button:has-text("Repost with your thoughts")',
   // LKD-2 — a single activity/update card on a profile's recent-activity page.
   feedUpdate: 'div.feed-shared-update-v2[data-urn], div[data-urn^="urn:li:activity"]',
+  // LKD-3 — a job result card on the jobs search page.
+  jobCard: 'div.job-card-container, li.jobs-search-results__list-item, div.base-card',
+  jobTitle: '.job-card-list__title, .base-search-card__title, a.job-card-container__link',
+  jobCompany: '.job-card-container__primary-description, .base-search-card__subtitle',
+  jobLocation: '.job-card-container__metadata-item, .job-search-card__location',
+  jobLink: 'a.job-card-container__link, a.base-card__full-link',
 };
+
+const JOB_CAP = 25; // keep digests small + gentle
 
 const NAV_TIMEOUT_MS = Number(process.env.LINKEDIN_NAV_TIMEOUT_MS) || 45_000;
 
@@ -112,7 +127,34 @@ async function typeHuman(page: any, selector: string, text: string): Promise<voi
   await sleep(rand(500, 1200));
 }
 
-export const realDriver: LinkedInDriver & LinkedInReader = {
+export const realDriver: LinkedInDriver & LinkedInReader & LinkedInJobSearcher = {
+  // ── LKD-3 · NEEDS LIVE TUNING: run a jobs search and read the result cards (read-only). ──
+  async searchJobs(orgId, agentId, query, location) {
+    const params = new URLSearchParams({ keywords: query });
+    if (location) params.set('location', location);
+    const url = `https://www.linkedin.com/jobs/search/?${params.toString()}`;
+    return withPage(orgId, agentId, async (page) => {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await assertAuthed(page);
+      await page.waitForSelector(SELECTORS.jobCard, { timeout: NAV_TIMEOUT_MS }).catch(() => {});
+      const sel = SELECTORS;
+      const jobs: JobResult[] = await page.evaluate((s: typeof SELECTORS, cap: number) => {
+        const text = (root: Element, q: string) => (root.querySelector(q)?.textContent || '').trim();
+        const cards = Array.from(document.querySelectorAll(s.jobCard)).slice(0, cap);
+        return cards.map((c) => {
+          const link = c.querySelector(s.jobLink) as HTMLAnchorElement | null;
+          return {
+            title: text(c, s.jobTitle),
+            company: text(c, s.jobCompany),
+            location: text(c, s.jobLocation),
+            url: link?.href || '',
+          };
+        }).filter((j) => j.title);
+      }, sel, JOB_CAP);
+      return jobs;
+    });
+  },
+
   // ── LKD-2 · NEEDS LIVE TUNING: read the person's most recent activity post. ──
   async fetchLatestPost(orgId, agentId, profileUrl) {
     const url = profileUrl.replace(/\/$/, '') + '/recent-activity/all/';
